@@ -1,6 +1,4 @@
 node_modules/
 .env
-*.db
-*.db-shm
-*.db-wal
-.DS_Store
+nextap.db
+nextap.db-*
