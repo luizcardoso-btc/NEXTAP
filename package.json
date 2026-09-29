@@ -17,5 +17,8 @@
     "jsonwebtoken": "^9.0.2",
     "mercadopago": "^2.0.15",
     "nanoid": "^3.3.7"
+  },
+  "engines": {
+    "node": ">=18 <23"
   }
 }

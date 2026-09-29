@@ -48,6 +48,11 @@ placas e vendas.
 5. Volte nas variáveis e ajuste `PUBLIC_BACKEND_URL` para essa mesma URL, e `FRONTEND_URL`
    para a URL do seu site/painel do revendedor.
 
+**Importante — banco de dados no Railway:** o backend usa SQLite em arquivo, e o disco do
+Railway é apagado a cada deploy. Para não perder revendedores, pedidos e placas, crie um
+**Volume** no serviço (aba *Settings → Volumes*, ex.: montado em `/data`). O caminho do banco é
+detectado automaticamente (ou defina `DB_PATH`). Confira em `/health` se o serviço subiu.
+
 ### Opção Render
 Mesma ideia: "New Web Service", aponte para o repositório, comando de start `npm start`,
 e configure as mesmas variáveis de ambiente.
