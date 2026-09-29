@@ -3,6 +3,18 @@
 API que dá suporte ao site, ao painel do revendedor e ao painel do admin: cadastro/login,
 placas, vendas, pedidos e pagamento via Mercado Pago (Pix e cartão de crédito).
 
+## Páginas (servidas pelo próprio backend)
+
+| Endereço | O que é |
+|---|---|
+| `/` | Site de vendas |
+| `/revendedor/` | Painel do revendedor (aceita `?tab=login` e `?tab=registro`) |
+| `/admin/` | Painel admin do fornecedor |
+| `/health` | Verificação de saúde do serviço |
+
+Os arquivos ficam em `public/`. Como página e API estão no mesmo domínio, elas chamam `/api` direto e não há
+problema de CORS. Nesse caso `FRONTEND_URL` pode ficar vazio.
+
 ## 1. O que você precisa antes de começar
 
 1. **Conta no Mercado Pago** (a mesma que você já usa para vender) e uma aplicação criada em
