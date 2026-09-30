@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const db = require('./database.js'); // abre o banco (e aplica migrações) já no boot
 
 // Sem JWT_SECRET o login quebra em runtime (jwt.sign lança erro). Melhor falhar já no boot,
 // com uma mensagem clara nos logs do Railway.
@@ -21,7 +22,7 @@ app.use(cors(origins.length ? { origin: origins } : {}));
 app.use(express.json({ limit: '1mb' }));
 
 // Health check (Railway usa para saber se o deploy subiu)
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health', (req, res) => res.json({ ok: true, dados_persistentes: db.meta.persistente }));
 
 app.use('/api/auth', require('./routes-auth.js'));
 app.use('/api/resellers', require('./routes-resellers.js'));
@@ -31,6 +32,8 @@ app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / N
 
 // Site (/), painel do revendedor (/revendedor) e painel admin (/admin) — servidos pelo próprio backend,
 // no mesmo domínio da API, então não há problema de CORS.
+['logo.png', 'placa.jpg', 'favicon.png'].forEach(f =>
+  app.get('/' + f, (req, res) => res.sendFile(path.join(__dirname, f), { maxAge: '1d' })));
 const page = f => (req, res) => res.sendFile(path.join(__dirname, f));
 app.get('/', page('site.html'));
 app.get(['/revendedor', '/revendedor/'], page('revendedor.html'));
@@ -45,7 +48,16 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`NexTap backend rodando na porta ${PORT}`);
   require('./routes-payments.js').diagnose().catch(() => {});
 });
+
+// No redeploy o Railway manda SIGTERM: fecha o banco direito para não deixar nada pela metade.
+function encerrar() {
+  console.log('Encerrando: fechando o banco com segurança…');
+  server.close(() => { try { db.close(); } catch (e) {} process.exit(0); });
+  setTimeout(() => { try { db.close(); } catch (e) {} process.exit(0); }, 8000).unref();
+}
+process.on('SIGTERM', encerrar);
+process.on('SIGINT', encerrar);

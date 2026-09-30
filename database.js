@@ -1,24 +1,82 @@
-// Banco de dados SQLite (arquivo local nextap.db).
-// Simples de rodar, e fácil de trocar por Postgres depois se precisar escalar.
+// Banco de dados SQLite.
+//
+// COMO OS DADOS FICAM SEGUROS
+//  1. O arquivo do banco fica num Volume do Railway (fora do código). Deploy, commit e atualização do
+//     backend NÃO tocam nele. (O arquivo *.db está no .gitignore, então nunca é sobrescrito pelo GitHub.)
+//  2. Mudanças na estrutura (novas colunas/tabelas) entram como "migrações" numeradas, que só ADICIONAM.
+//     Antes de aplicar qualquer migração, o sistema tira uma cópia do banco.
+//  3. Cópia de segurança automática: 1 por dia (guarda as 14 mais recentes), na mesma pasta do Volume.
+//  4. O painel admin tem o botão "Backup" para baixar uma cópia completa para o seu computador.
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
-// No Railway o disco do container é apagado a cada deploy. Para não perder os dados,
-// crie um Volume no serviço (ex.: montado em /data) — o Railway expõe o caminho em
-// RAILWAY_VOLUME_MOUNT_PATH. Também dá para definir DB_PATH manualmente.
+// ---------- onde fica o arquivo ----------
+const volumePath = process.env.RAILWAY_VOLUME_MOUNT_PATH; // o Railway define sozinho quando há Volume
 const dbFile =
   process.env.DB_PATH ||
-  (process.env.RAILWAY_VOLUME_MOUNT_PATH
-    ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'nextap.db')
-    : path.join(__dirname, 'nextap.db'));
+  (volumePath ? path.join(volumePath, 'nextap.db') : path.join(__dirname, 'nextap.db'));
+const naRailway = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID);
+// Sem Volume no Railway o disco é apagado a cada deploy — os dados NÃO ficam salvos.
+const persistente = !!(process.env.DB_PATH || volumePath) || !naRailway;
+const backupDir = path.join(path.dirname(dbFile), 'backups');
+
 fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+const bancoJaExistia = fs.existsSync(dbFile) && fs.statSync(dbFile).size > 0;
 
 const db = new Database(dbFile);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-db.exec(`
+// ---------- cópias de segurança (VACUUM INTO gera uma cópia consistente, mesmo com o banco em uso) ----------
+function copiarPara(destino) {
+  if (fs.existsSync(destino)) fs.unlinkSync(destino);
+  db.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`);
+  return destino;
+}
+
+function limparBackupsAntigos(prefixo, manter) {
+  try {
+    const arquivos = fs.readdirSync(backupDir).filter(f => f.startsWith(prefixo) && f.endsWith('.db')).sort().reverse();
+    arquivos.slice(manter).forEach(f => fs.unlinkSync(path.join(backupDir, f)));
+  } catch (e) { /* sem problema */ }
+}
+
+function backupDiario() {
+  try {
+    fs.mkdirSync(backupDir, { recursive: true });
+    const destino = path.join(backupDir, `nextap-${new Date().toISOString().slice(0, 10)}.db`);
+    if (!fs.existsSync(destino)) {
+      copiarPara(destino);
+      console.log(`[DB] Backup diário criado: ${destino}`);
+    }
+    limparBackupsAntigos('nextap-', 14);
+  } catch (e) {
+    console.error('[DB] Falha no backup diário:', e.message);
+  }
+}
+
+// Cópia temporária para o botão "Backup" do painel admin (quem chama apaga o arquivo depois).
+function copiaTemporaria() {
+  return copiarPara(path.join(os.tmpdir(), `nextap-backup-${Date.now()}.db`));
+}
+
+function listarBackups() {
+  try {
+    return fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).sort().reverse().map(f => {
+      const st = fs.statSync(path.join(backupDir, f));
+      return { nome: f, tamanho: st.size, criado_em: st.mtime.toISOString() };
+    });
+  } catch (e) { return []; }
+}
+
+// ---------- migrações (só ADICIONAM; nunca apagam dados) ----------
+// Para mudar a estrutura no futuro: acrescente um novo item no FINAL da lista. Nunca edite os antigos.
+// Exemplo:  db => db.exec("ALTER TABLE resellers ADD COLUMN cidade TEXT"),
+const MIGRACOES = [
+  // v1 — estrutura inicial. Usa IF NOT EXISTS: um banco criado antes deste sistema entra aqui sem perder nada.
+  db => db.exec(`
 CREATE TABLE IF NOT EXISTS resellers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -82,7 +140,62 @@ CREATE TABLE IF NOT EXISTS sales (
   cost REAL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-`);
+`),
+  // v2 — endereço de entrega no pedido + endereço padrão salvo no revendedor (só adiciona colunas).
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN ship_name TEXT;
+    ALTER TABLE orders ADD COLUMN ship_phone TEXT;
+    ALTER TABLE orders ADD COLUMN ship_cep TEXT;
+    ALTER TABLE orders ADD COLUMN ship_street TEXT;
+    ALTER TABLE orders ADD COLUMN ship_number TEXT;
+    ALTER TABLE orders ADD COLUMN ship_complement TEXT;
+    ALTER TABLE orders ADD COLUMN ship_district TEXT;
+    ALTER TABLE orders ADD COLUMN ship_city TEXT;
+    ALTER TABLE orders ADD COLUMN ship_state TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_cep TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_street TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_number TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_complement TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_district TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_city TEXT;
+    ALTER TABLE resellers ADD COLUMN addr_state TEXT;
+  `),
+  // v3 — links de redefinição de senha (só o hash do token fica guardado).
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_password_resets_hash ON password_resets(token_hash);
+  `),
+];
+
+const versaoAtual = db.pragma('user_version', { simple: true });
+if (versaoAtual < MIGRACOES.length) {
+  const temTabelas = db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").get().n > 0;
+  if (bancoJaExistia && temTabelas) {
+    try {
+      fs.mkdirSync(backupDir, { recursive: true });
+      const snap = path.join(backupDir, `antes-da-migracao-v${versaoAtual}-${Date.now()}.db`);
+      copiarPara(snap);
+      limparBackupsAntigos('antes-da-migracao-', 5);
+      console.log(`[DB] Cópia de segurança antes de atualizar a estrutura: ${snap}`);
+    } catch (e) {
+      console.error('[DB] Não consegui copiar antes da migração:', e.message);
+    }
+  }
+  for (let v = versaoAtual; v < MIGRACOES.length; v++) {
+    db.transaction(() => {
+      MIGRACOES[v](db);
+      db.pragma(`user_version = ${v + 1}`);
+    })();
+    console.log(`[DB] Estrutura atualizada para a versão ${v + 1}.`);
+  }
+}
 
 // Tabela de preços oficial (mesma do site). Usada na primeira criação do banco.
 const PRECOS = [
@@ -109,5 +222,25 @@ if (atuais.length === 0) {
     atuais.every((t, i) => t.min_qty === PRECOS_ANTIGOS[i][0] && t.max_qty === PRECOS_ANTIGOS[i][1] && t.unit_price === PRECOS_ANTIGOS[i][2]);
   if (iguaisAosAntigos) gravarPrecos(PRECOS);
 }
+
+
+// ---------- resumo no log + backup ao ligar ----------
+const resumo = {
+  revendedores: db.prepare('SELECT COUNT(*) AS n FROM resellers').get().n,
+  pedidos: db.prepare('SELECT COUNT(*) AS n FROM orders').get().n,
+  placas: db.prepare('SELECT COUNT(*) AS n FROM plates').get().n,
+};
+console.log(`[DB] Arquivo: ${dbFile} | dados persistentes: ${persistente ? 'SIM' : 'NÃO'} | ` +
+  `revendedores: ${resumo.revendedores}, pedidos: ${resumo.pedidos}, placas: ${resumo.placas}`);
+if (!persistente) {
+  console.error('[DB] ⚠️  ATENÇÃO: sem Volume no Railway, os dados serão APAGADOS a cada deploy/reinício. ' +
+    'Crie um Volume (montado em /data) e conecte ao serviço NEXTAP.');
+}
+backupDiario();
+setInterval(backupDiario, 6 * 60 * 60 * 1000).unref();
+
+db.meta = { arquivo: dbFile, persistente, backupDir };
+db.copiaTemporaria = copiaTemporaria;
+db.listarBackups = listarBackups;
 
 module.exports = db;

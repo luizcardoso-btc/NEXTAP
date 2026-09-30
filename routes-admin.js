@@ -1,5 +1,7 @@
 const express = require('express');
+const fs = require('fs');
 const db = require('./database.js');
+const senha = require('./senha.js');
 const { requireAdmin } = require('./auth-middleware.js');
 
 const router = express.Router();
@@ -11,7 +13,31 @@ router.get('/overview', (req, res) => {
   const pendentes = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='aguardando_pagamento'").get().n;
   const placas = db.prepare('SELECT COUNT(*) AS n FROM plates').get().n;
   const ativas = db.prepare("SELECT COUNT(*) AS n FROM plates WHERE status='ativa'").get().n;
-  res.json({ revendedores, faturamento, pendentes, placas, ativas });
+  res.json({ revendedores, faturamento, pendentes, placas, ativas, persistente: db.meta.persistente });
+});
+
+// Gera um link de redefinição de senha (vale 24h) para o fornecedor enviar ao revendedor, por exemplo no WhatsApp.
+router.post('/resellers/:id/reset-link', (req, res) => {
+  const r = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Revendedor não encontrado.' });
+  res.json({ link: senha.criarLink(req, r.id, 24), nome: r.name });
+});
+
+// Baixa uma cópia completa do banco (arquivo .db) — guarde no seu computador de vez em quando.
+router.get('/backup', (req, res) => {
+  try {
+    const arquivo = db.copiaTemporaria();
+    const nome = `nextap-backup-${new Date().toISOString().slice(0, 10)}.db`;
+    res.download(arquivo, nome, () => fs.unlink(arquivo, () => {}));
+  } catch (e) {
+    console.error('[DB] Falha ao gerar backup para download:', e.message);
+    res.status(500).json({ error: 'Não foi possível gerar o backup agora.' });
+  }
+});
+
+// Situação do armazenamento e dos backups automáticos.
+router.get('/sistema', (req, res) => {
+  res.json({ dados_persistentes: db.meta.persistente, backups: db.listarBackups() });
 });
 
 router.get('/resellers', (req, res) => {

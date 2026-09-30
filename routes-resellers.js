@@ -8,7 +8,7 @@ router.use(requireReseller);
 
 // Dados do próprio revendedor logado
 router.get('/me', (req, res) => {
-  const r = db.prepare('SELECT id, name, email, whatsapp, created_at FROM resellers WHERE id = ?').get(req.resellerId);
+  const r = db.prepare('SELECT id, name, email, whatsapp, created_at, addr_cep, addr_street, addr_number, addr_complement, addr_district, addr_city, addr_state FROM resellers WHERE id = ?').get(req.resellerId);
   res.json(r);
 });
 

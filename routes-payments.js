@@ -53,6 +53,28 @@ function interpretarErroMP(err) {
   return { cliente: 'Não foi possível iniciar o pagamento. Tente novamente em instantes.', dica: null };
 }
 
+
+// Lê e valida o endereço de entrega enviado no checkout.
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+function lerEntrega(raw) {
+  const e = raw && typeof raw === 'object' ? raw : {};
+  const t = (v, max = 120) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const d = {
+    name: t(e.name), phone: String(e.phone ?? '').replace(/\D/g, '').slice(0, 13),
+    cep: String(e.cep ?? '').replace(/\D/g, ''), street: t(e.street), number: t(e.number, 20),
+    complement: t(e.complement, 60), district: t(e.district), city: t(e.city), state: t(e.state, 2).toUpperCase(),
+  };
+  if (!d.name) return { erro: 'Informe o nome de quem vai receber a entrega.' };
+  if (d.phone.length < 10) return { erro: 'Informe um telefone/WhatsApp com DDD para a entrega.' };
+  if (d.cep.length !== 8) return { erro: 'CEP inválido. Informe os 8 números do CEP.' };
+  if (!d.street) return { erro: 'Informe a rua/avenida da entrega.' };
+  if (!d.number) return { erro: 'Informe o número (ou S/N se não houver).' };
+  if (!d.district) return { erro: 'Informe o bairro da entrega.' };
+  if (!d.city) return { erro: 'Informe a cidade da entrega.' };
+  if (!UFS.includes(d.state)) return { erro: 'Informe o estado (UF) da entrega, por exemplo BA.' };
+  return { dados: d };
+}
+
 // E-mail da conta que recebe (descoberto no boot). O Mercado Pago recusa pagador = recebedor.
 let collectorEmail = null;
 
@@ -118,15 +140,24 @@ router.post('/checkout', requireReseller, async (req, res) => {
   const cpf = String(payer.cpf || '').replace(/\D/g, '');
   if (cpf && cpf.length !== 11) return res.status(400).json({ error: 'CPF inválido. Informe os 11 números ou deixe em branco.' });
 
+  const entrega = lerEntrega(body.shipping);
+  if (entrega.erro) return res.status(400).json({ error: entrega.erro });
+  const ship = entrega.dados;
+
   const price = unitPrice(qty);
   const total = Math.round(price * qty * 100) / 100;
   const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.resellerId);
 
   const orderInfo = db.prepare(
-    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method)
-     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?)`
-  ).run(req.resellerId, qty_azul, qty_preta, price, total, method);
+    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method,
+       ship_name, ship_phone, ship_cep, ship_street, ship_number, ship_complement, ship_district, ship_city, ship_state)
+     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(req.resellerId, qty_azul, qty_preta, price, total, method,
+        ship.name, ship.phone, ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state);
   const orderId = orderInfo.lastInsertRowid;
+  // Guarda como endereço padrão do revendedor (o próximo checkout já vem preenchido).
+  db.prepare(`UPDATE resellers SET addr_cep=?, addr_street=?, addr_number=?, addr_complement=?, addr_district=?, addr_city=?, addr_state=? WHERE id=?`)
+    .run(ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state, req.resellerId);
 
   const base = baseUrl(req);
   try {

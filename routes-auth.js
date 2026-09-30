@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const senha = require('./senha.js');
 const db = require('./database.js');
 
 const router = express.Router();
@@ -39,6 +40,33 @@ router.post('/login', async (req, res) => {
 
   const token = sign({ id: r.id, type: 'reseller' });
   res.json({ token, reseller: { id: r.id, name: r.name, email: r.email, whatsapp: r.whatsapp } });
+});
+
+// Esqueci a senha: sempre responde "ok" (não revela se o e-mail existe).
+router.post('/forgot', async (req, res) => {
+  const email = String((req.body || {}).email || '').toLowerCase().trim();
+  if (!email.includes('@')) return res.status(400).json({ error: 'Informe o e-mail da sua conta.' });
+  if (senha.limitado(req.ip)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
+  const r = db.prepare('SELECT id, name, email FROM resellers WHERE email = ?').get(email);
+  if (r) {
+    const link = senha.criarLink(req, r.id, 1);
+    const enviado = await senha.enviarEmail(r.email, r.name, link).catch(() => false);
+    if (!enviado) console.log(`[SENHA] E-mail não configurado. Link de redefinição (1h) para ${r.email}: ${link}`);
+  }
+  res.json({ ok: true });
+});
+
+// Define a nova senha a partir do link e já entra no painel.
+router.post('/reset', async (req, res) => {
+  const { token, password } = req.body || {};
+  if (typeof password !== 'string' || password.length < 6) return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
+  const row = senha.validar(token);
+  if (!row) return res.status(400).json({ error: 'Link inválido ou expirado. Peça um novo link.' });
+  const hash = await bcrypt.hash(password, 10);
+  db.prepare('UPDATE resellers SET password_hash = ? WHERE id = ?').run(hash, row.reseller_id);
+  senha.consumir(row.reseller_id);
+  const r = db.prepare('SELECT id, name, email, whatsapp FROM resellers WHERE id = ?').get(row.reseller_id);
+  res.json({ token: sign({ id: r.id, type: 'reseller' }), reseller: r });
 });
 
 // Login do admin (fornecedor) — credenciais fixas definidas no .env
