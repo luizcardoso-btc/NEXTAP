@@ -174,8 +174,8 @@ return '<div class="g2"><div class="card"><h3>Tabela de preços</h3>'+TIERS.map(
 '<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n*u)+'</b></div><br><button class="btn p" style="width:100%" onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.</small></div></div>'}
 function q(c,d){N[c]=Math.max(0,N[c]+d);draw()}
 function openCheckout(){var n=N.azul+N.preta;if(!n)return alert('Escolha ao menos 1 placa.');var u=price(n),parts=ME.email.split('@'),fname=ME.name.split(' ')[0],lname=ME.name.split(' ').slice(1).join(' ');
-mo('<h3 style="margin:0">Finalizar pedido</h3><p class="mut">'+n+' placa(s) · '+R(n*u)+' no total</p><label>Nome<input id="p1" value="'+E(fname)+'"></label><label>Sobrenome<input id="p2" value="'+E(lname)+'"></label><label>E-mail para o pagamento<input id="p3" type="email" value="'+E(ME.email)+'"></label><label>Forma de pagamento<select id="p4"><option value="pix">Pix</option><option value="credit_card">Cartão de crédito</option></select></label><div class="row"><button class="btn p" onclick="doCheckout()">Continuar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
-async function doCheckout(){var body={qty_azul:N.azul,qty_preta:N.preta,method:$('p4').value,payer:{first_name:$('p1').value.trim(),last_name:$('p2').value.trim(),email:$('p3').value.trim()}};
+mo('<h3 style="margin:0">Finalizar pedido</h3><p class="mut">'+n+' placa(s) · '+R(n*u)+' no total</p><label>Nome<input id="p1" value="'+E(fname)+'"></label><label>Sobrenome<input id="p2" value="'+E(lname)+'"></label><label>E-mail para o pagamento<input id="p3" type="email" value="'+E(ME.email)+'"></label><label>CPF (opcional, ajuda na aprovação do Pix)<input id="p5" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></label><label>Forma de pagamento<select id="p4"><option value="pix">Pix</option><option value="credit_card">Cartão de crédito</option></select></label><div class="row"><button class="btn p" onclick="doCheckout()">Continuar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
+async function doCheckout(){var body={qty_azul:N.azul,qty_preta:N.preta,method:$('p4').value,payer:{first_name:$('p1').value.trim(),last_name:$('p2').value.trim(),email:$('p3').value.trim(),cpf:$('p5').value.trim()}};
 if(!body.payer.first_name||!body.payer.email)return alert('Preencha nome e e-mail.');
 mo('<h3 style="margin:0">Processando…</h3><p class="mut">Só um instante, estamos gerando seu pagamento.</p>');
 try{
@@ -185,8 +185,19 @@ try{
     startPoll(r.order_id);
   }
 }catch(e){mo('<h3 style="margin:0">Não foi possível gerar o pagamento</h3><p class="mut">'+E(e.message)+'</p><div class="row"><button class="btn" onclick="cl()">Fechar</button></div>')}}
+var PIXCODE='';
+function copyPix(){
+  var ok=function(){var b=$('cpb');if(b){b.textContent='Código copiado ✓';setTimeout(function(){b.textContent='Copiar código Pix'},2500)}};
+  var fb=function(){var i=$('pxc');if(i){i.select();try{document.execCommand('copy');ok()}catch(e){alert('Selecione o código e copie manualmente.')}}};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(PIXCODE).then(ok,fb)}else fb();
+}
 function showPix(r){
-mo('<h3 style="margin:0">Pague com Pix</h3><p class="mut">Total: '+R(r.total)+'</p>'+(r.pix_qr_base64?'<div style="text-align:center"><img src="data:image/png;base64,'+r.pix_qr_base64+'" style="width:220px;height:220px"></div>':'')+'<label>Pix copia e cola<input readonly value="'+E(r.pix_qr_code||'')+'" onclick="this.select()"></label><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+E(r.pix_qr_code||'').replace(/'/g,"\\'")+'\')">Copiar código</button><p class="mut" id="pxs">Aguardando pagamento…</p><div class="row"><button class="btn" onclick="cl()">Fechar</button></div>');
+PIXCODE=r.pix_qr_code||'';
+mo('<h3 style="margin:0">Pague com Pix</h3><p class="mut">Total: '+R(r.total)+'</p>'
++(r.pix_qr_base64?'<div style="text-align:center"><img alt="QR Code Pix" src="data:image/png;base64,'+r.pix_qr_base64+'" style="width:220px;height:220px;background:#fff;padding:6px;border-radius:8px"></div><p class="mut" style="text-align:center;margin:6px 0">Abra o app do seu banco, escolha <b>Pix → Ler QR Code</b>.</p>':'')
++(PIXCODE?'<label>Pix copia e cola (chave do pagamento)<input id="pxc" readonly value="'+E(PIXCODE)+'" onclick="this.select()"></label><button class="btn p" id="cpb" style="width:100%" onclick="copyPix()">Copiar código Pix</button>':'')
++(r.ticket_url?'<p style="margin:8px 0"><a href="'+E(r.ticket_url)+'" target="_blank" rel="noopener">Abrir página de pagamento do Pix</a></p>':'')
++'<p class="mut" id="pxs">Aguardando pagamento… esta tela atualiza sozinha quando o Pix for confirmado.</p><div class="row"><button class="btn" onclick="cl()">Fechar</button></div>');
 startPoll(r.order_id);
 }
 function startPoll(orderId){if(pollTimer)clearInterval(pollTimer);var tries=0;

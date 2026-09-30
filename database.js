@@ -84,14 +84,30 @@ CREATE TABLE IF NOT EXISTS sales (
 );
 `);
 
-// Faixas de preço padrão, só na primeira vez que o banco é criado
-const tierCount = db.prepare('SELECT COUNT(*) AS n FROM price_tiers').get().n;
-if (tierCount === 0) {
+// Tabela de preços oficial (mesma do site). Usada na primeira criação do banco.
+const PRECOS = [
+  [1, 1, 21.9],
+  [2, 49, 17.5],
+  [50, 299, 16.5],
+  [300, 1000000, 15.9],
+];
+// Tabela antiga que era criada por padrão nas primeiras versões.
+const PRECOS_ANTIGOS = [[1, 1, 25], [2, 49, 20], [50, 299, 17], [300, 1000000, 15]];
+
+const gravarPrecos = db.transaction(lista => {
+  db.prepare('DELETE FROM price_tiers').run();
   const insert = db.prepare('INSERT INTO price_tiers (min_qty, max_qty, unit_price) VALUES (?, ?, ?)');
-  insert.run(1, 1, 25);
-  insert.run(2, 49, 20);
-  insert.run(50, 299, 17);
-  insert.run(300, 1000000, 15);
+  lista.forEach(p => insert.run(p[0], p[1], p[2]));
+});
+
+const atuais = db.prepare('SELECT min_qty, max_qty, unit_price FROM price_tiers ORDER BY min_qty').all();
+if (atuais.length === 0) {
+  gravarPrecos(PRECOS);
+} else {
+  // Banco já existente: só troca se ainda estiver com a tabela antiga (não sobrescreve preços editados no admin).
+  const iguaisAosAntigos = atuais.length === PRECOS_ANTIGOS.length &&
+    atuais.every((t, i) => t.min_qty === PRECOS_ANTIGOS[i][0] && t.max_qty === PRECOS_ANTIGOS[i][1] && t.unit_price === PRECOS_ANTIGOS[i][2]);
+  if (iguaisAosAntigos) gravarPrecos(PRECOS);
 }
 
 module.exports = db;

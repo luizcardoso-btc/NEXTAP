@@ -8,6 +8,79 @@ const router = express.Router();
 
 const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
 
+// Endereço público do backend (usado no webhook e no retorno do cartão).
+// Usa PUBLIC_BACKEND_URL se for https; senão, deduz do próprio pedido (Railway já entrega https).
+function baseUrl(req) {
+  const b = (process.env.PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '');
+  if (/^https:\/\//i.test(b)) return b;
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+// Transforma o erro do SDK do Mercado Pago em texto para o log (sem vazar o token).
+function descreverErroMP(err) {
+  const causa = Array.isArray(err?.cause) ? err.cause : (err?.cause ? [err.cause] : []);
+  return JSON.stringify({
+    status: err?.status,
+    error: err?.error,
+    message: err?.message,
+    cause: causa.map(c => ({ code: c?.code, description: c?.description })),
+  });
+}
+
+// Traduz os erros mais comuns em (a) o que mostrar ao cliente e (b) o que fazer, para o log.
+function interpretarErroMP(err) {
+  const texto = descreverErroMP(err).toLowerCase();
+  const status = Number(err?.status);
+  if (texto.includes('invalid users involved') || texto.includes('2034') || texto.includes('same user')) {
+    return { cliente: 'Use um e-mail diferente do e-mail da conta do Mercado Pago que recebe os pagamentos.',
+             dica: 'O e-mail do pagador é igual ao da conta que recebe (ou mistura conta de teste com real).' };
+  }
+  if (texto.includes('key enabled') || texto.includes('13253') || texto.includes('without key')) {
+    return { cliente: 'Pix indisponível no momento. Tente pagar com cartão ou fale com o suporte.',
+             dica: 'A conta do Mercado Pago não tem chave Pix cadastrada. Cadastre uma chave Pix na conta que gera o token.' };
+  }
+  if (status === 401 || status === 403 || texto.includes('invalid_token') || texto.includes('unauthorized') || texto.includes('invalid access token')) {
+    return { cliente: 'Pagamentos indisponíveis no momento. Fale com o suporte.',
+             dica: 'MP_ACCESS_TOKEN inválido ou sem permissão. Use o Access Token de PRODUÇÃO (começa com APP_USR-).' };
+  }
+  if (texto.includes('identification') || texto.includes('cpf')) {
+    return { cliente: 'Informe um CPF válido para gerar o Pix.', dica: 'Mercado Pago recusou o CPF/identificação do pagador.' };
+  }
+  if (texto.includes('notification_url')) {
+    return { cliente: 'Não foi possível iniciar o pagamento. Tente novamente em instantes.',
+             dica: 'notification_url inválida. Confira PUBLIC_BACKEND_URL (https://... sem barra no final).' };
+  }
+  return { cliente: 'Não foi possível iniciar o pagamento. Tente novamente em instantes.', dica: null };
+}
+
+// E-mail da conta que recebe (descoberto no boot). O Mercado Pago recusa pagador = recebedor.
+let collectorEmail = null;
+
+// Roda no boot: confere se o token do Mercado Pago funciona e deixa o resultado nos logs do Railway.
+async function diagnose() {
+  const token = process.env.MP_ACCESS_TOKEN;
+  if (!token) return;
+  const tipo = token.startsWith('TEST-') ? 'TESTE' : token.startsWith('APP_USR-') ? 'PRODUÇÃO' : 'DESCONHECIDO';
+  console.log(`[MP] Tipo de token: ${tipo}`);
+  if (tipo === 'TESTE') console.warn('[MP] AVISO: token de TESTE. Para receber pagamentos reais use o Access Token de produção (APP_USR-...).');
+  const pub = (process.env.PUBLIC_BACKEND_URL || '').trim();
+  if (!/^https:\/\/[^/]+$/i.test(pub.replace(/\/+$/, ''))) {
+    console.warn(`[MP] AVISO: PUBLIC_BACKEND_URL ausente ou fora do padrão ("${pub}"). Vou deduzir o endereço pela requisição.`);
+  }
+  try {
+    const r = await fetch('https://api.mercadopago.com/users/me', { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) {
+      console.error(`[MP] TOKEN RECUSADO pelo Mercado Pago (HTTP ${r.status}). Gere/cole novamente o Access Token de produção.`);
+      return;
+    }
+    const u = await r.json();
+    collectorEmail = (u.email || '').toLowerCase() || null;
+    console.log(`[MP] Token OK — conta ${u.nickname || u.id} (${u.email || 'sem e-mail'}), país ${u.site_id}. Não use esse e-mail como pagador nos testes.`);
+  } catch (e) {
+    console.warn('[MP] Não consegui validar o token agora:', e.message);
+  }
+}
+
 function unitPrice(qty) {
   const tiers = db.prepare('SELECT * FROM price_tiers ORDER BY min_qty').all();
   const t = tiers.find(t => qty >= t.min_qty && qty <= t.max_qty);
@@ -39,6 +112,12 @@ router.post('/checkout', requireReseller, async (req, res) => {
     return res.status(400).json({ error: 'Informe nome e e-mail para o pagamento.' });
   }
 
+  if (collectorEmail && String(payer.email).toLowerCase().trim() === collectorEmail) {
+    return res.status(400).json({ error: 'Use um e-mail diferente do e-mail da conta do Mercado Pago que recebe os pagamentos.' });
+  }
+  const cpf = String(payer.cpf || '').replace(/\D/g, '');
+  if (cpf && cpf.length !== 11) return res.status(400).json({ error: 'CPF inválido. Informe os 11 números ou deixe em branco.' });
+
   const price = unitPrice(qty);
   const total = Math.round(price * qty * 100) / 100;
   const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.resellerId);
@@ -49,6 +128,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
   ).run(req.resellerId, qty_azul, qty_preta, price, total, method);
   const orderId = orderInfo.lastInsertRowid;
 
+  const base = baseUrl(req);
   try {
     if (method === 'pix') {
       const payment = new Payment(client);
@@ -58,13 +138,15 @@ router.post('/checkout', requireReseller, async (req, res) => {
           description: `NexTap — ${qty} placa(s) para ${reseller.name}`,
           payment_method_id: 'pix',
           payer: {
-            email: payer.email,
+            email: String(payer.email).trim(),
             first_name: payer.first_name,
-            last_name: payer.last_name || '',
+            last_name: payer.last_name || payer.first_name,
+            ...(cpf ? { identification: { type: 'CPF', number: cpf } } : {}),
           },
-          notification_url: `${process.env.PUBLIC_BACKEND_URL}/api/payments/webhook`,
+          ...(base.startsWith('https://') ? { notification_url: `${base}/api/payments/webhook` } : {}),
           external_reference: String(orderId),
         },
+        requestOptions: { idempotencyKey: `nextap-pix-${orderId}` },
       });
 
       const txData = result.point_of_interaction?.transaction_data;
@@ -77,6 +159,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
         status: result.status, // "pending" até o pagamento cair
         pix_qr_code: txData?.qr_code || null,
         pix_qr_base64: txData?.qr_code_base64 || null,
+        ticket_url: txData?.ticket_url || null,
         total,
       });
     }
@@ -91,15 +174,15 @@ router.post('/checkout', requireReseller, async (req, res) => {
           unit_price: total,
           currency_id: 'BRL',
         }],
-        payer: { email: payer.email, name: payer.first_name },
+        payer: { email: String(payer.email).trim(), name: payer.first_name },
         external_reference: String(orderId),
-        notification_url: `${process.env.PUBLIC_BACKEND_URL}/api/payments/webhook`,
+        ...(base.startsWith('https://') ? { notification_url: `${base}/api/payments/webhook` } : {}),
         back_urls: {
-          success: `${process.env.FRONTEND_URL}/?pedido=${orderId}&status=aprovado`,
-          pending: `${process.env.FRONTEND_URL}/?pedido=${orderId}&status=pendente`,
-          failure: `${process.env.FRONTEND_URL}/?pedido=${orderId}&status=falhou`,
+          success: `${base}/revendedor/?pedido=${orderId}&status=aprovado`,
+          pending: `${base}/revendedor/?pedido=${orderId}&status=pendente`,
+          failure: `${base}/revendedor/?pedido=${orderId}&status=falhou`,
         },
-        auto_return: 'approved',
+        ...(base.startsWith('https://') ? { auto_return: 'approved' } : {}),
       },
     });
 
@@ -107,9 +190,12 @@ router.post('/checkout', requireReseller, async (req, res) => {
     return res.json({ order_id: orderId, checkout_url: result.init_point, total });
 
   } catch (err) {
-    console.error('Erro Mercado Pago:', err?.message || err);
-    db.prepare(`UPDATE orders SET status='cancelado' WHERE id=?`).run(orderId);
-    return res.status(502).json({ error: 'Não foi possível iniciar o pagamento. Tente novamente em instantes.' });
+    const { cliente, dica } = interpretarErroMP(err);
+    console.error(`[MP] Falha ao criar pagamento (${method}, pedido ${orderId}): ${descreverErroMP(err)}`);
+    if (dica) console.error(`[MP] O QUE FAZER: ${dica}`);
+    // Nenhum pagamento foi criado, então descarta a tentativa (não fica pedido "cancelado" sujando a lista).
+    db.prepare('DELETE FROM orders WHERE id=? AND mp_payment_id IS NULL').run(orderId);
+    return res.status(502).json({ error: cliente });
   }
 });
 
@@ -165,4 +251,5 @@ function generatePlatesForOrder(orderId) {
   for (let i = 0; i < order.qty_preta; i++) insert.run(order.reseller_id, order.id, nanoid(10), 'preta', order.unit_price);
 }
 
+router.diagnose = diagnose;
 module.exports = router;

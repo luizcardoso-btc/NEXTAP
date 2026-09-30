@@ -45,4 +45,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`NexTap backend rodando na porta ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`NexTap backend rodando na porta ${PORT}`);
+  require('./routes-payments.js').diagnose().catch(() => {});
+});
