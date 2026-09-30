@@ -77,4 +77,351 @@ router.post('/price-tiers', (req, res) => {
 });
 
 module.exports = router;
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const db = require('../db');
 
+const router = express.Router();
+
+function sign(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '30d' });
+}
+
+// Cadastro gratuito de revendedor
+router.post('/register', async (req, res) => {
+  const { name, email, whatsapp, password } = req.body || {};
+  if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string'
+      || !name.trim() || !email.includes('@') || password.length < 6) {
+    return res.status(400).json({ error: 'Informe nome, e-mail e senha (mínimo 6 caracteres).' });
+  }
+  const existing = db.prepare('SELECT id FROM resellers WHERE email = ?').get(email.toLowerCase());
+  if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+
+  const hash = await bcrypt.hash(password, 10);
+  const info = db.prepare(
+    'INSERT INTO resellers (name, email, whatsapp, password_hash) VALUES (?, ?, ?, ?)'
+  ).run(name, email.toLowerCase(), whatsapp || '', hash);
+
+  const token = sign({ id: info.lastInsertRowid, type: 'reseller' });
+  res.json({ token, reseller: { id: info.lastInsertRowid, name, email: email.toLowerCase(), whatsapp } });
+});
+
+// Login de revendedor
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  const r = db.prepare('SELECT * FROM resellers WHERE email = ?').get(String(email || '').toLowerCase().trim());
+  if (!r) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+  const ok = await bcrypt.compare(password || '', r.password_hash);
+  if (!ok) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+
+  const token = sign({ id: r.id, type: 'reseller' });
+  res.json({ token, reseller: { id: r.id, name: r.name, email: r.email, whatsapp: r.whatsapp } });
+});
+
+// Login do admin (fornecedor) — credenciais fixas definidas no .env
+router.post('/admin-login', (req, res) => {
+  const { email, password } = req.body || {};
+  const safeEq = (a, b) => {
+    const A = Buffer.from(String(a ?? '')), B = Buffer.from(String(b ?? ''));
+    return A.length === B.length && crypto.timingSafeEqual(A, B);
+  };
+  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD
+      || !safeEq(email, process.env.ADMIN_EMAIL) || !safeEq(password, process.env.ADMIN_PASSWORD)) {
+    return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+  }
+  const token = sign({ type: 'admin' });
+  res.json({ token });
+});
+
+module.exports = router;
+const express = require('express');
+const { nanoid } = require('nanoid');
+const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
+const db = require('../db');
+const { requireReseller } = require('../middleware/auth');
+
+const router = express.Router();
+
+const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
+
+function unitPrice(qty) {
+  const tiers = db.prepare('SELECT * FROM price_tiers ORDER BY min_qty').all();
+  const t = tiers.find(t => qty >= t.min_qty && qty <= t.max_qty);
+  if (t) return t.unit_price;
+  return tiers.length ? tiers[0].unit_price : 25; // fallback se a tabela de preços estiver vazia
+}
+
+// Cria o pedido + inicia o pagamento.
+// method: "pix" ou "credit_card"
+// Para "pix" respondemos já com o QR Code (copia e cola + imagem).
+// Para "credit_card" respondemos com o link de Checkout Pro do Mercado Pago.
+router.post('/checkout', requireReseller, async (req, res) => {
+  if (!process.env.MP_ACCESS_TOKEN) {
+    return res.status(503).json({ error: 'Pagamentos indisponíveis no momento.' });
+  }
+  const body = req.body || {};
+  const method = body.method;
+  const payer = body.payer;
+  const qty_azul = Number(body.qty_azul ?? 0);
+  const qty_preta = Number(body.qty_preta ?? 0);
+  if (!Number.isInteger(qty_azul) || !Number.isInteger(qty_preta) || qty_azul < 0 || qty_preta < 0) {
+    return res.status(400).json({ error: 'Quantidades inválidas.' });
+  }
+  const qty = qty_azul + qty_preta;
+  if (qty < 1) return res.status(400).json({ error: 'Escolha ao menos 1 placa.' });
+  if (qty > 100000) return res.status(400).json({ error: 'Quantidade acima do permitido.' });
+  if (!['pix', 'credit_card'].includes(method)) return res.status(400).json({ error: 'Forma de pagamento inválida.' });
+  if (!payer || !payer.email || !payer.first_name) {
+    return res.status(400).json({ error: 'Informe nome e e-mail para o pagamento.' });
+  }
+
+  const price = unitPrice(qty);
+  const total = Math.round(price * qty * 100) / 100;
+  const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.resellerId);
+
+  const orderInfo = db.prepare(
+    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method)
+     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?)`
+  ).run(req.resellerId, qty_azul, qty_preta, price, total, method);
+  const orderId = orderInfo.lastInsertRowid;
+
+  try {
+    if (method === 'pix') {
+      const payment = new Payment(client);
+      const result = await payment.create({
+        body: {
+          transaction_amount: total,
+          description: `NexTap — ${qty} placa(s) para ${reseller.name}`,
+          payment_method_id: 'pix',
+          payer: {
+            email: payer.email,
+            first_name: payer.first_name,
+            last_name: payer.last_name || '',
+          },
+          notification_url: `${process.env.PUBLIC_BACKEND_URL}/api/payments/webhook`,
+          external_reference: String(orderId),
+        },
+      });
+
+      const txData = result.point_of_interaction?.transaction_data;
+      db.prepare(`UPDATE orders SET mp_payment_id=?, pix_qr_code=?, pix_qr_base64=? WHERE id=?`)
+        .run(String(result.id), txData?.qr_code || '', txData?.qr_code_base64 || '', orderId);
+
+      return res.json({
+        order_id: orderId,
+        payment_id: result.id,
+        status: result.status, // "pending" até o pagamento cair
+        pix_qr_code: txData?.qr_code || null,
+        pix_qr_base64: txData?.qr_code_base64 || null,
+        total,
+      });
+    }
+
+    // credit_card via Checkout Pro: devolvemos um link para o revendedor pagar
+    const preference = new Preference(client);
+    const result = await preference.create({
+      body: {
+        items: [{
+          title: `NexTap — ${qty} placa(s) NFC`,
+          quantity: 1,
+          unit_price: total,
+          currency_id: 'BRL',
+        }],
+        payer: { email: payer.email, name: payer.first_name },
+        external_reference: String(orderId),
+        notification_url: `${process.env.PUBLIC_BACKEND_URL}/api/payments/webhook`,
+        back_urls: {
+          success: `${process.env.FRONTEND_URL}/?pedido=${orderId}&status=aprovado`,
+          pending: `${process.env.FRONTEND_URL}/?pedido=${orderId}&status=pendente`,
+          failure: `${process.env.FRONTEND_URL}/?pedido=${orderId}&status=falhou`,
+        },
+        auto_return: 'approved',
+      },
+    });
+
+    db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(result.id, orderId);
+    return res.json({ order_id: orderId, checkout_url: result.init_point, total });
+
+  } catch (err) {
+    console.error('Erro Mercado Pago:', err?.message || err);
+    db.prepare(`UPDATE orders SET status='cancelado' WHERE id=?`).run(orderId);
+    return res.status(502).json({ error: 'Não foi possível iniciar o pagamento. Tente novamente em instantes.' });
+  }
+});
+
+// O revendedor consulta o status do pedido (usado para o painel atualizar sozinho enquanto aguarda o Pix)
+router.get('/orders/:id/status', requireReseller, (req, res) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
+  if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  res.json(order);
+});
+
+// Webhook do Mercado Pago: ele chama esta URL quando o status de um pagamento muda.
+// Precisa estar public (PUBLIC_BACKEND_URL) e cadastrada no seu app do Mercado Pago.
+router.post('/webhook', express.json(), async (req, res) => {
+  try {
+    const topic = req.query.type || req.body?.type;
+    const paymentId = req.query['data.id'] || req.body?.data?.id;
+    if (topic !== 'payment' || !paymentId) return res.sendStatus(200);
+
+    const payment = new Payment(client);
+    const info = await payment.get({ id: paymentId });
+    const orderId = Number(info.external_reference);
+    if (!orderId) return res.sendStatus(200);
+
+    if (info.status === 'approved') {
+      // Só processa se o pedido ainda não foi pago. (Antes, um webhook repetido depois do
+      // pedido virar "enviado"/"entregue" voltava o status para "pago" e duplicava as placas.)
+      const markPaid = db.transaction(() => {
+        const r = db.prepare(
+          `UPDATE orders SET status='pago', paid_at=datetime('now'), mp_payment_id=?
+           WHERE id=? AND status IN ('aguardando_pagamento','cancelado')`
+        ).run(String(info.id), orderId);
+        if (r.changes) generatePlatesForOrder(orderId);
+      });
+      markPaid();
+    } else if (['rejected', 'cancelled'].includes(info.status)) {
+      db.prepare(`UPDATE orders SET status='cancelado' WHERE id=? AND status='aguardando_pagamento'`).run(orderId);
+    }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('Erro no webhook do Mercado Pago:', err?.message || err);
+    res.sendStatus(200); // sempre 200, senão o Mercado Pago fica reenviando
+  }
+});
+
+// Cria as placas no estoque do revendedor assim que o pedido é pago
+function generatePlatesForOrder(orderId) {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!order) return;
+  const insert = db.prepare(
+    `INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)`
+  );
+  for (let i = 0; i < order.qty_azul; i++) insert.run(order.reseller_id, order.id, nanoid(10), 'azul', order.unit_price);
+  for (let i = 0; i < order.qty_preta; i++) insert.run(order.reseller_id, order.id, nanoid(10), 'preta', order.unit_price);
+}
+
+module.exports = router;
+const express = require('express');
+const db = require('../db');
+
+const router = express.Router();
+
+// Contadores públicos usados no site (placas vendidas e revendedores cadastrados).
+// Sem autenticação de propósito: é o que alimenta a seção de números do site.
+router.get('/api/public/stats', (req, res) => {
+  const plates_sold = db.prepare('SELECT COUNT(*) AS n FROM plates').get().n;
+  const resellers = db.prepare('SELECT COUNT(*) AS n FROM resellers').get().n;
+  res.json({ plates_sold, resellers });
+});
+
+// Esta é a rota que o QR Code / NFC da placa abre: /r/:code
+// Ela registra a leitura e redireciona para o link configurado pelo revendedor.
+router.get('/r/:code', (req, res) => {
+  const plate = db.prepare('SELECT * FROM plates WHERE code = ?').get(req.params.code);
+  if (!plate) return res.status(404).send('Placa não encontrada.');
+
+  db.prepare('INSERT INTO plate_reads (plate_id) VALUES (?)').run(plate.id);
+
+  if (!plate.destination_url) {
+    return res.status(200).send('Esta placa ainda não foi configurada pelo revendedor.');
+  }
+  res.redirect(302, plate.destination_url);
+});
+
+module.exports = router;
+const express = require('express');
+const { nanoid } = require('nanoid');
+const db = require('../db');
+const { requireReseller } = require('../middleware/auth');
+
+const router = express.Router();
+router.use(requireReseller);
+
+// Dados do próprio revendedor logado
+router.get('/me', (req, res) => {
+  const r = db.prepare('SELECT id, name, email, whatsapp, created_at FROM resellers WHERE id = ?').get(req.resellerId);
+  res.json(r);
+});
+
+router.put('/me', (req, res) => {
+  const { name, whatsapp } = req.body || {};
+  if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+    return res.status(400).json({ error: 'Nome inválido.' });
+  }
+  db.prepare('UPDATE resellers SET name = COALESCE(?, name), whatsapp = COALESCE(?, whatsapp) WHERE id = ?')
+    .run(name ?? null, whatsapp ?? null, req.resellerId);
+  res.json({ ok: true });
+});
+
+// Faixas de preço (públicas para o revendedor logado)
+router.get('/price-tiers', (req, res) => {
+  const tiers = db.prepare('SELECT min_qty, max_qty, unit_price FROM price_tiers ORDER BY min_qty').all();
+  res.json(tiers);
+});
+
+// Placas do revendedor
+router.get('/plates', (req, res) => {
+  const plates = db.prepare('SELECT * FROM plates WHERE reseller_id = ? ORDER BY id DESC').all(req.resellerId);
+  res.json(plates);
+});
+
+router.put('/plates/:id', (req, res) => {
+  const plate = db.prepare('SELECT * FROM plates WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
+  if (!plate) return res.status(404).json({ error: 'Placa não encontrada.' });
+  const { client_name, plate_label, destination_type, destination_url } = req.body || {};
+  if (destination_url && !/^https?:\/\//.test(destination_url)) {
+    return res.status(400).json({ error: 'O link deve começar com http:// ou https://' });
+  }
+  const status = (client_name || destination_url) ? 'ativa' : 'estoque';
+  db.prepare(`UPDATE plates SET client_name=?, plate_label=?, destination_type=?, destination_url=?, status=? WHERE id=?`)
+    .run(client_name || '', plate_label || '', destination_type || '', destination_url || '', status, plate.id);
+  res.json({ ok: true });
+});
+
+// Leituras (quando alguém aproxima o celular/escaneia o QR) — o endpoint público /r/:code está em routes/public.js
+router.get('/plates/:id/reads', (req, res) => {
+  const plate = db.prepare('SELECT id FROM plates WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
+  if (!plate) return res.status(404).json({ error: 'Placa não encontrada.' });
+  const reads = db.prepare('SELECT read_at FROM plate_reads WHERE plate_id = ? ORDER BY read_at DESC').all(plate.id);
+  res.json(reads);
+});
+
+// Vendas do revendedor
+router.get('/sales', (req, res) => {
+  const sales = db.prepare('SELECT * FROM sales WHERE reseller_id = ? ORDER BY id DESC').all(req.resellerId);
+  res.json(sales);
+});
+
+router.post('/sales', (req, res) => {
+  const { client_name, value, plate_id, destination_url } = req.body || {};
+  if (!client_name || typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return res.status(400).json({ error: 'Informe cliente e valor válidos.' });
+  }
+  let cost = 0;
+  if (plate_id) {
+    const plate = db.prepare('SELECT * FROM plates WHERE id = ? AND reseller_id = ?').get(plate_id, req.resellerId);
+    if (!plate) return res.status(404).json({ error: 'Placa não encontrada.' });
+    cost = plate.cost || 0;
+    db.prepare(`UPDATE plates SET status='ativa', client_name=?, destination_url=COALESCE(NULLIF(?, ''), destination_url) WHERE id=?`)
+      .run(client_name, destination_url || '', plate_id);
+  }
+  const info = db.prepare('INSERT INTO sales (reseller_id, plate_id, client_name, value, cost) VALUES (?, ?, ?, ?, ?)')
+    .run(req.resellerId, plate_id || null, client_name, value, cost);
+  res.json({ id: info.lastInsertRowid });
+});
+
+router.delete('/sales/:id', (req, res) => {
+  db.prepare('DELETE FROM sales WHERE id = ? AND reseller_id = ?').run(req.params.id, req.resellerId);
+  res.json({ ok: true });
+});
+
+// Pedidos do revendedor (histórico)
+router.get('/orders', (req, res) => {
+  const orders = db.prepare('SELECT * FROM orders WHERE reseller_id = ? ORDER BY id DESC').all(req.resellerId);
+  res.json(orders);
+});
+
+module.exports = router;
