@@ -28,6 +28,8 @@ const bancoJaExistia = fs.existsSync(dbFile) && fs.statSync(dbFile).size > 0;
 const db = new Database(dbFile);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma('synchronous = FULL'); // grava no disco antes de confirmar (mais seguro contra queda de energia/reinício)
+db.pragma('busy_timeout = 5000');
 
 // ---------- cópias de segurança (VACUUM INTO gera uma cópia consistente, mesmo com o banco em uso) ----------
 function copiarPara(destino) {
@@ -64,11 +66,94 @@ function copiaTemporaria() {
 
 function listarBackups() {
   try {
-    return fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).sort().reverse().map(f => {
+    return fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).map(f => {
       const st = fs.statSync(path.join(backupDir, f));
       return { nome: f, tamanho: st.size, criado_em: st.mtime.toISOString() };
-    });
+    }).sort((x, y) => y.criado_em.localeCompare(x.criado_em));
   } catch (e) { return []; }
+}
+
+function contagens(conn = db) {
+  const n = t => { try { return conn.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n; } catch (e) { return 0; } };
+  return { revendedores: n('resellers'), pedidos: n('orders'), placas: n('plates'), vendas: n('sales'), leituras: n('plate_reads') };
+}
+
+// Cópia a cada vez que o sistema liga (cada deploy): se algo der errado numa atualização, há um ponto de volta recente.
+function snapshotInicio() {
+  try {
+    const c = contagens();
+    if (!c.revendedores && !c.pedidos) return;
+    fs.mkdirSync(backupDir, { recursive: true });
+    const recentes = listarBackups().filter(b => b.nome.startsWith('inicio-'));
+    if (recentes[0] && Date.now() - new Date(recentes[0].criado_em).getTime() < 30 * 60 * 1000) return;
+    const carimbo = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    copiarPara(path.join(backupDir, `inicio-${carimbo}.db`));
+    limparBackupsAntigos('inicio-', 10);
+  } catch (e) { console.error('[DB] Falha na cópia de início:', e.message); }
+}
+
+// ---------- restauração ----------
+const esc = p => p.replace(/'/g, "''");
+
+// Confere se o arquivo enviado é mesmo um backup do NexTap, sem mexer em nada.
+function validarBackup(arquivo) {
+  const buf = Buffer.alloc(16);
+  const fd = fs.openSync(arquivo, 'r'); fs.readSync(fd, buf, 0, 16, 0); fs.closeSync(fd);
+  if (buf.toString('utf8', 0, 15) !== 'SQLite format 3') throw new Error('O arquivo enviado não é um backup do NexTap (.db).');
+  const t = new Database(arquivo, { readonly: true, fileMustExist: true });
+  try {
+    if (t.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('O arquivo de backup está corrompido.');
+    const cols = t.prepare('PRAGMA table_info(resellers)').all().map(c => c.name);
+    if (!cols.includes('email') || !cols.includes('password_hash')) throw new Error('Este arquivo não tem a tabela de revendedores do NexTap.');
+    const versao = t.pragma('user_version', { simple: true });
+    if (versao > MIGRACOES.length) throw new Error('Este backup é de uma versão mais nova do sistema. Atualize o sistema antes de restaurar.');
+    return { versao, contagem: contagens(t) };
+  } finally { t.close(); }
+}
+
+// modo "substituir": troca TODOS os dados pelos do backup. modo "revendedores": só acrescenta os revendedores
+// (por e-mail) que existem no backup e não existem agora — não apaga nada.
+// Antes de qualquer mudança, tira uma cópia de segurança do estado atual.
+function restaurar(arquivo, modo) {
+  const info = validarBackup(arquivo);
+  const antes = contagens();
+  fs.mkdirSync(backupDir, { recursive: true });
+  const seguranca = path.join(backupDir, `antes-do-restore-${Date.now()}.db`);
+  copiarPara(seguranca);
+  limparBackupsAntigos('antes-do-restore-', 5);
+  let acrescentados = 0;
+  db.pragma('foreign_keys = OFF');
+  db.exec(`ATTACH DATABASE '${esc(arquivo)}' AS bk`);
+  try {
+    db.transaction(() => {
+      const colunas = (esquema, t) => db.prepare(`PRAGMA ${esquema}.table_info("${t}")`).all().map(c => c.name);
+      if (modo === 'revendedores') {
+        const noBk = colunas('bk', 'resellers');
+        const cols = colunas('main', 'resellers').filter(c => c !== 'id' && noBk.includes(c));
+        const lista = cols.map(c => `"${c}"`).join(',');
+        acrescentados = db.prepare(`INSERT INTO main.resellers (${lista}) SELECT ${lista} FROM bk.resellers
+          WHERE lower(email) NOT IN (SELECT lower(email) FROM main.resellers)`).run().changes;
+        return;
+      }
+      const noBackup = new Set(db.prepare("SELECT name FROM bk.sqlite_master WHERE type='table'").all().map(r => r.name));
+      const tabelas = db.prepare("SELECT name FROM main.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(r => r.name);
+      for (const t of tabelas) {
+        db.exec(`DELETE FROM main."${t}"`);
+        if (!noBackup.has(t)) continue;
+        const dele = new Set(colunas('bk', t));
+        const cols = colunas('main', t).filter(c => dele.has(c));
+        if (!cols.length) continue;
+        const lista = cols.map(c => `"${c}"`).join(',');
+        db.exec(`INSERT INTO main."${t}" (${lista}) SELECT ${lista} FROM bk."${t}"`);
+      }
+    })();
+  } finally {
+    try { db.exec('DETACH DATABASE bk'); } catch (e) { /* já solto */ }
+    db.pragma('foreign_keys = ON');
+  }
+  if (modo !== 'revendedores' && db.prepare('SELECT COUNT(*) AS n FROM price_tiers').get().n === 0) gravarPrecos(PRECOS);
+  console.log(`[DB] Restauração (${modo}) concluída. Cópia de segurança do estado anterior: ${seguranca}`);
+  return { modo, acrescentados, antes, depois: contagens(), versao_backup: info.versao, copia_de_seguranca: path.basename(seguranca) };
 }
 
 // ---------- migrações (só ADICIONAM; nunca apagam dados) ----------
@@ -172,6 +257,15 @@ CREATE TABLE IF NOT EXISTS sales (
     );
     CREATE INDEX IF NOT EXISTS idx_password_resets_hash ON password_resets(token_hash);
   `),
+  // v4 — código de rastreio da placa (#00001), único, impresso na frente da placa. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE plates ADD COLUMN tracking_code TEXT;
+    UPDATE plates SET tracking_code = '#' || printf('%05d', id) WHERE tracking_code IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_plates_tracking ON plates(tracking_code);
+    CREATE INDEX IF NOT EXISTS idx_reads_plate ON plate_reads(plate_id, read_at);
+  `),
+  // v5 — país no endereço do revendedor (Minha conta). Só adiciona.
+  db => db.exec(`ALTER TABLE resellers ADD COLUMN addr_country TEXT;`),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
@@ -236,11 +330,17 @@ if (!persistente) {
   console.error('[DB] ⚠️  ATENÇÃO: sem Volume no Railway, os dados serão APAGADOS a cada deploy/reinício. ' +
     'Crie um Volume (montado em /data) e conecte ao serviço NEXTAP.');
 }
+const integridade = db.pragma('quick_check', { simple: true });
+if (integridade !== 'ok') console.error('[DB] ⚠️  Verificação de integridade falhou:', integridade);
+snapshotInicio();
 backupDiario();
 setInterval(backupDiario, 6 * 60 * 60 * 1000).unref();
 
 db.meta = { arquivo: dbFile, persistente, backupDir };
 db.copiaTemporaria = copiaTemporaria;
 db.listarBackups = listarBackups;
+db.contagens = contagens;
+db.restaurar = restaurar;
+db.integridade = () => db.pragma('quick_check', { simple: true });
 
 module.exports = db;

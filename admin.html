@@ -44,7 +44,7 @@ main{padding:24px;min-width:0}.top{display:flex;justify-content:space-between;ga
 <div id="app">
 <aside><a class="logo lgc" href="/" aria-label="NexTap"><img src="/logo.png" alt="NexTap" class="lg"></a><small style="margin-top:4px">PAINEL ADMIN · FORNECEDOR</small>
 <small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a>
-<small>GESTÃO</small><a data-v="fin" onclick="nav('fin')">💰 Financeiro</a><a data-v="cfg" onclick="nav('cfg')">⚙ Preços</a>
+<small>GESTÃO</small><a data-v="fin" onclick="nav('fin')">💰 Financeiro</a><a data-v="cfg" onclick="nav('cfg')">⚙ Preços</a><a data-v="dados" onclick="nav('dados')">🛡 Dados e backups</a>
 <div class="me"><div class="av">A</div><div><b>Admin</b><div class="mut" style="color:#7d8c86">Fornecedor</div></div><button class="btn s" style="margin-left:auto" onclick="out()" title="Sair">⎋</button></div></aside>
 <main><div class="top"><div id="hd"></div><span class="row" style="margin:0"><button class="btn" onclick="baixarBackup()" title="Baixar uma cópia completa dos dados">⬇ Backup</button><button class="btn" onclick="theme()">◐</button></span></div><div id="v"></div></main></div>
 <div id="mo"><div class="box" id="mb"></div></div>
@@ -83,11 +83,11 @@ OVER=r[0];REVS=r[1];ORDERS=r[2];PLATES=r[3];TIERS=r[4]}
 function inP(x){var d=new Date(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias'],['month','Este mês'],['all','Tudo']].map(function(p){return '<button class="pill '+(per===p[0]?'on':'')+'" onclick="per=\''+p[0]+'\';draw()">'+p[1]+'</button>'}).join('')+'</div>'}
 function head(t,s){$('hd').innerHTML='<h2>'+t+'</h2><span class="mut">'+s+'</span>'}
-function nav(v){cur=v;document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
+function nav(v){cur=v;if(v==='dados')loadSis();document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
 function mo(h){$('mb').innerHTML=h;$('mo').style.display='grid'}function cl(){$('mo').style.display='none'}
 $('mo').onclick=function(e){if(e.target===this)cl()};
 function draw(){var aviso=(OVER&&OVER.persistente===false)?'<div class="card" style="border-color:#dc2626;margin-bottom:12px"><b style="color:#dc2626">⚠ Atenção: os dados não estão sendo guardados de forma permanente.</b><br><span class="mut">No Railway, crie um Volume (montado em /data) e conecte ao serviço. Até lá, cadastros e pedidos são apagados a cada atualização do sistema.</span></div>':'';
-$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,cfg:vCfg})[cur]()}
+$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,cfg:vCfg,dados:vDados})[cur]()}
 async function baixarBackup(){
   try{
     var r=await fetch(API_BASE+'/admin/backup',{headers:{Authorization:'Bearer '+TOKEN}});
@@ -97,7 +97,7 @@ async function baixarBackup(){
     document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},5000);
   }catch(e){alert(e.message)}
 }
-var STM={aguardando_pagamento:'Aguardando pagamento',pago:'Pago',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado',estoque:'Em estoque',ativa:'Ativa'};
+var STM={aguardando_pagamento:'Aguardando pagamento',pago:'Pago',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado',estoque:'Não configurada',ativa:'Configurada'};
 function stTag(s){return '<span class="st '+(s||'').toLowerCase()+'">'+(STM[s]||s)+'</span>'}
 
 /* dash */
@@ -122,6 +122,42 @@ function cpEnt(){var ok=function(){$('entcp').textContent='Copiado ✓'};if(navi
 async function rstLink(id){try{var r=await api('/admin/resellers/'+id+'/reset-link',{method:'POST'});window.RSTL=r.link;
 mo('<h3 style="margin:0">Link para criar nova senha</h3><p class="mut" style="margin:0">Envie para '+E(r.nome)+' (vale por 24 horas e só pode ser usado uma vez).</p><input id="rstin" readonly value="'+E(r.link)+'" onclick="this.select()"><div class="row"><button class="btn p" id="rstcp" onclick="cpRst()">Copiar link</button><button class="btn" onclick="cl()">Fechar</button></div>')}catch(e){alert(e.message)}}
 function cpRst(){var i=$('rstin');i.select();var ok=function(){$('rstcp').textContent='Link copiado ✓'};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(window.RSTL).then(ok,function(){try{document.execCommand('copy');ok()}catch(e){}});else{try{document.execCommand('copy');ok()}catch(e){}}}
+var SIS=null;
+async function loadSis(){try{SIS=await api('/admin/sistema')}catch(e){SIS=null}if(cur==='dados')draw()}
+function kb(n){return n>1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB'}
+function dh(s){return new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function vDados(){head('Dados e backups','Proteja e recupere os dados da plataforma.');
+  if(!SIS)return '<div class="card mut">Carregando…</div>';
+  var c=SIS.contagens,ok=SIS.dados_persistentes&&SIS.integridade==='ok';
+  var K=function(l,v){return '<div class="k"><div><small>'+l+'</small><b>'+v+'</b></div></div>'};
+  return '<div class="card" style="border-color:'+(ok?'#16a34a':'#dc2626')+'"><b style="color:'+(ok?'#16a34a':'#dc2626')+'">'+(ok?'✔ Dados protegidos':'⚠ Atenção')+'</b>'
+  +'<p class="mut" style="margin:6px 0 0">'+(SIS.dados_persistentes?'O banco está num Volume permanente: atualizar o sistema não apaga cadastros.':'O banco NÃO está num Volume. Crie um Volume (em /data) no Railway e conecte ao serviço, senão os dados somem a cada atualização.')+' Verificação de integridade: <b>'+E(SIS.integridade)+'</b>.</p></div>'
+  +'<div class="grid" style="margin-top:12px">'+K('Revendedores',c.revendedores)+K('Pedidos',c.pedidos)+K('Placas',c.placas)+K('Vendas registradas',c.vendas)+K('Leituras de placas',c.leituras)+'</div>'
+  +'<div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Guardar uma cópia no seu computador</h3><p class="mut" style="margin:0 0 10px">Recomendado: baixe uma cópia de vez em quando (semanalmente). Se precisar, é este arquivo que restaura tudo.</p>'
+  +'<div class="row" style="margin:0"><button class="btn p" onclick="baixarBackup()">⬇ Baixar backup completo (.db)</button><button class="btn" onclick="baixarCsv()">⬇ Lista de revendedores (planilha)</button></div></div>'
+  +'<div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Recuperar dados</h3><p class="mut" style="margin:0 0 10px">Antes de qualquer restauração, o sistema guarda uma cópia do estado atual. Nada se perde sem volta.</p>'
+  +'<label>Enviar um backup (.db) que você baixou antes<input type="file" id="rsf" accept=".db,application/octet-stream"></label>'
+  +'<label style="margin-top:10px">Como restaurar<select id="rsm"><option value="revendedores">Só recuperar revendedores que estão faltando (não apaga nada)</option><option value="substituir">Substituir TUDO pelo conteúdo do backup</option></select></label>'
+  +'<div class="row"><button class="btn p" onclick="restaurarUpload()">Restaurar do arquivo</button></div></div>'
+  +'<div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Backups guardados no servidor</h3><div class="tw"><table><tr><th>Arquivo</th><th>Criado em</th><th>Tamanho</th><th></th></tr>'
+  +(SIS.backups.length?SIS.backups.map(function(b){return '<tr><td>'+E(b.nome)+'</td><td>'+dh(b.criado_em)+'</td><td>'+kb(b.tamanho)+'</td><td style="white-space:nowrap"><button class="btn s" onclick="restaurarLocal(\''+E(b.nome)+'\',\'revendedores\')">Recuperar revendedores</button> <button class="btn s" onclick="restaurarLocal(\''+E(b.nome)+'\',\'substituir\')">Restaurar tudo</button></td></tr>'}).join(''):'<tr><td colspan="4" class="mut">Nenhum backup ainda — o primeiro é criado automaticamente.</td></tr>')
+  +'</table></div><small class="mut">Um backup automático é criado todo dia e a cada atualização do sistema.</small></div>'
+  +'<div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Reativar um revendedor</h3><p class="mut" style="margin:0 0 10px">Para quem já tinha conta e não aparece mais: cadastre aqui e envie o link para a pessoa escolher uma nova senha.</p>'
+  +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px"><label>Nome<input id="nr1"></label><label>E-mail<input id="nr2" type="email"></label><label>WhatsApp<input id="nr3" inputmode="tel"></label></div>'
+  +'<div class="row"><button class="btn p" onclick="novoRev()">Cadastrar e gerar link</button></div></div>'}
+async function baixarArq(url,nome){try{var r=await fetch(API_BASE+url,{headers:{Authorization:'Bearer '+TOKEN}});if(!r.ok)throw new Error('Não foi possível gerar o arquivo agora.');var b=await r.blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},5000)}catch(e){alert(e.message)}}
+function baixarCsv(){baixarArq('/admin/export/revendedores','nextap-revendedores-'+new Date().toISOString().slice(0,10)+'.csv')}
+function resumoRestore(r){return (r.modo==='revendedores'?'Revendedores recuperados: '+r.acrescentados+'.':'Dados restaurados.')+'\nAgora: '+r.depois.revendedores+' revendedores, '+r.depois.pedidos+' pedidos, '+r.depois.placas+' placas.\n(Antes: '+r.antes.revendedores+' revendedores, '+r.antes.pedidos+' pedidos, '+r.antes.placas+' placas. Uma cópia do estado anterior ficou guardada.)'}
+async function restaurarLocal(nome,modo){
+  if(!confirm(modo==='substituir'?'Substituir TODOS os dados pelo conteúdo de '+nome+'? Uma cópia do estado atual será guardada antes.':'Recuperar os revendedores que estão em '+nome+' e não existem agora? Nada será apagado.'))return;
+  try{var r=await api('/admin/restore-local',{method:'POST',body:JSON.stringify({nome:nome,modo:modo})});alert(resumoRestore(r));await loadAll();await loadSis()}catch(e){alert(e.message)}}
+async function restaurarUpload(){
+  var f=$('rsf').files[0],modo=$('rsm').value;if(!f)return alert('Escolha o arquivo de backup (.db).');
+  if(!confirm(modo==='substituir'?'Substituir TODOS os dados pelo conteúdo de '+f.name+'? Uma cópia do estado atual será guardada antes.':'Recuperar os revendedores de '+f.name+' que não existem agora? Nada será apagado.'))return;
+  try{var r=await fetch(API_BASE+'/admin/restore?modo='+modo,{method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/octet-stream'},body:f});var j=await r.json();if(!r.ok)throw new Error(j.error||'Falha ao restaurar.');alert(resumoRestore(j));await loadAll();await loadSis()}catch(e){alert(e.message)}}
+async function novoRev(){
+  try{var r=await api('/admin/resellers',{method:'POST',body:JSON.stringify({name:$('nr1').value,email:$('nr2').value,whatsapp:$('nr3').value})});await loadAll();window.RSTL=r.link;
+  mo('<h3 style="margin:0">Revendedor cadastrado ✓</h3><p class="mut" style="margin:0">Envie este link para a pessoa criar a senha (vale 72 horas, uso único).</p><input id="rstin" readonly value="'+E(r.link)+'" onclick="this.select()"><div class="row"><button class="btn p" id="rstcp" onclick="cpRst()">Copiar link</button><button class="btn" onclick="cl()">Fechar</button></div>');draw()}catch(e){alert(e.message)}}
 async function setOrd(id,s){try{await api('/admin/orders/'+id+'/status',{method:'PUT',body:JSON.stringify({status:s})});ORDERS=await api('/admin/orders');draw()}catch(e){alert(e.message)}}
 /* placas */
 function vPlacas(){head('Placas emitidas','Todas as placas já geradas no sistema, por revendedor.');

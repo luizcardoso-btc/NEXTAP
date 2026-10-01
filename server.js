@@ -15,6 +15,13 @@ if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) console.warn('AVISO
 
 const app = express();
 app.set('trust proxy', 1); // Railway fica atrás de um proxy
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (/^\/(admin|revendedor|api)/.test(req.path)) res.setHeader('Cache-Control', 'no-store'); // nada de dados em cache
+  next();
+});
 
 // CORS: se FRONTEND_URL estiver definido, aceita só ele (mais seguro); vírgula separa vários domínios.
 const origins = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean);

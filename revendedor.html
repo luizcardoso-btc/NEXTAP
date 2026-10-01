@@ -190,7 +190,7 @@ function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['3
 function inP(x){var d=new Date(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function tot(a){return a.reduce(function(s,x){return s+(x.value!=null?x.value:x.total||0)},0)}
 function draw(){$('v').innerHTML=({dash:vDash,placas:vPlacas,placa:vPlaca,vendas:vVendas,comprar:vComprar,pedidos:vPedidos,conta:vConta,academy:vAcad})[cur]()}
-function stTag(s){var m={estoque:'Em estoque',ativa:'Ativa',aguardando_pagamento:'Aguardando pagamento',pago:'Pago',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado'};return '<span class="st '+(s==='aguardando_pagamento'?'w':s==='estoque'?'g':'')+'">'+(m[s]||s)+'</span>'}
+function stTag(s){var m={estoque:'Não configurada',ativa:'Configurada',aguardando_pagamento:'Aguardando pagamento',pago:'Pago',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado'};return '<span class="st '+(s==='aguardando_pagamento'?'w':s==='estoque'?'g':'')+'">'+(m[s]||s)+'</span>'}
 
 /* ---- dashboard ---- */
 function vDash(){head('Dashboard','Veja o desempenho das suas vendas.');
@@ -201,30 +201,85 @@ var les=lsLes(),done=Object.keys(les).filter(function(k){return les[k]}).length,
 var b=[],mx=1;for(var i=6;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);var v=tot(SALES.filter(function(x){return new Date(x.created_at).toDateString()===d.toDateString()}));b.push([d.toLocaleDateString('pt-BR',{weekday:'short'}),v]);mx=Math.max(mx,v)}
 return '<div class="card" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>🎓 NFC Academy</b><div class="mut" style="margin:4px 0 8px">Próxima aula: '+E(LES[Math.min(done,LES.length-1)])+'</div><div class="pg"><i style="width:'+pc+'%"></i></div></div><b>'+pc+'%</b><button class="btn p" onclick="nav(\'academy\')">Continuar</button></div>'+
 '<h3 style="margin:22px 0 0">Vendas</h3>'+pills()+
-'<div class="k"><div><small>Faturamento total</small><b>'+R(tot(a))+'</b></div><div><small>Faturamento no mês</small><b>'+R(tot(moS))+'</b></div><div><small>Faturamento hoje</small><b>'+R(tot(hj))+'</b></div><div><small>Ticket médio</small><b>'+R(a.length?tot(a)/a.length:0)+'</b></div><div><small>Lucro estimado</small><b>'+R(tot(a)-cost)+'</b></div><div><small>Placas em estoque</small><b>'+est+'</b></div><div><small>Placas ativas</small><b>'+ativ+'</b></div></div>'+
+'<div class="k"><div><small>Faturamento total</small><b>'+R(tot(a))+'</b></div><div><small>Faturamento no mês</small><b>'+R(tot(moS))+'</b></div><div><small>Faturamento hoje</small><b>'+R(tot(hj))+'</b></div><div><small>Ticket médio</small><b>'+R(a.length?tot(a)/a.length:0)+'</b></div><div><small>Lucro estimado</small><b>'+R(tot(a)-cost)+'</b></div><div><small>Placas não configuradas</small><b>'+est+'</b></div><div><small>Placas configuradas</small><b>'+ativ+'</b></div></div>'+
 '<div class="g2"><div class="card"><h3>Últimos 7 dias</h3><div class="bars">'+b.map(function(x){return '<div><small>'+(x[1]?R(x[1]):'')+'</small><i style="height:'+x[1]/mx*100+'%"></i>'+x[0]+'</div>'}).join('')+'</div></div><div class="card"><h3>Vendas recentes</h3>'+(a.length?a.slice(0,5).map(function(x){return '<div class="qty"><span>'+E(x.client_name)+'<br><small class="mut">'+fd(x.created_at)+'</small></span><b>'+R(x.value)+'</b></div>'}).join(''):'<p class="mut">Nenhuma venda no período.</p>')+'</div></div>'}
 
 /* ---- placas ---- */
-function vPlacas(){head('Minhas placas','Ative, edite o destino e acompanhe seu estoque.');
-return '<div class="grid">'+(PLATES.length?PLATES.map(function(p){return '<div class="pl"><div style="display:flex;justify-content:space-between"><b>#'+pad(p.id)+'</b>'+stTag(p.status)+'</div><div><i class="sw" style="background:'+(p.color==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+p.color+'</div><div>'+(p.client_name?'<b>'+E(p.client_name)+'</b>':'<span class="mut">Sem estabelecimento</span>')+'</div>'+(p.destination_url?'<div class="mut" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ '+E(p.destination_url)+'</div>':'')+'<div class="mut">Código: <b>'+p.code+'</b></div><button class="btn s" onclick="edPl('+p.id+')">'+(p.status==='estoque'?'Ativar':'Editar destino')+'</button></div>'}).join(''):'<div class="card">Você ainda não tem placas. <a style="color:var(--pr);cursor:pointer;font-weight:700" onclick="nav(\'comprar\')">Comprar placas</a></div>')+'</div>'}
-async function edPl(id){selPl=id;var p=PLATES.filter(function(x){return x.id===id})[0];try{p.reads=await api('/resellers/plates/'+id+'/reads')}catch(e){p.reads=[]}nav('placa')}
+var PF='todas',PQ='',STATS={};
+function pc(p){return p.tracking_code||('#'+String(p.id).padStart(5,'0'))}
+function plLabel(id){var p=getPl(id);return p?pc(p):'#'+String(id).padStart(5,'0')}
+function plTag(p){return p.status==='ativa'?'<span class="st">Configurada</span>':'<span class="st g">Não configurada</span>'}
+function fuso(s){return s?new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null}
+function toast(m){var t=$('tt');if(!t){t=document.createElement('div');t.id='tt';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#15803d;color:#fff;padding:12px 20px;border-radius:12px;font-weight:600;z-index:40;box-shadow:0 10px 30px #0004;transition:opacity .3s';document.body.appendChild(t)}t.textContent=m;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(function(){t.style.opacity=0},2600)}
+function plGrid(){
+  var q=PQ.trim().toLowerCase();
+  var l=PLATES.filter(function(p){
+    if(PF==='nao'&&p.status==='ativa')return false;if(PF==='sim'&&p.status!=='ativa')return false;
+    return !q||[pc(p),p.client_name,p.plate_label,p.destination_url].join(' ').toLowerCase().indexOf(q)>-1});
+  if(!PLATES.length)return '<div class="card">Você ainda não tem placas. <a style="color:var(--pr);cursor:pointer;font-weight:700" onclick="nav(\'comprar\')">Comprar placas</a></div>';
+  if(!l.length)return '<div class="card mut">Nenhuma placa encontrada com esse filtro.</div>';
+  return '<div class="grid">'+l.map(function(p){
+    var lr=fuso(p.last_read_at);
+    return '<div class="pl"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:18px">'+E(pc(p))+'</b>'+plTag(p)+'</div>'
+    +'<div><i class="sw" style="background:'+(p.color==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+p.color+'</div>'
+    +'<div>'+(p.client_name?'<b>'+E(p.client_name)+'</b>':'<span class="mut">Sem cliente / empresa</span>')+(p.plate_label?'<div class="mut">'+E(p.plate_label)+'</div>':'')+'</div>'
+    +(p.destination_url?'<div class="mut" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+E(p.destination_type||'Destino')+' → '+E(p.destination_url)+'</div>':'<div class="mut">Sem destino</div>')
+    +'<div class="mut">Leituras: <b style="color:var(--tx)">'+(p.reads_total||0)+'</b>'+(lr?' · última '+lr:'')+'</div>'
+    +'<button class="btn s'+(p.status==='ativa'?'':' p')+'" onclick="edPl('+p.id+')">'+(p.status==='ativa'?'Editar / ver leituras':'Ativar e configurar')+'</button></div>'}).join('')+'</div>'}
+function rePl(){var g=$('plgrid');if(g)g.innerHTML=plGrid()}
+function setPF(f){PF=f;document.querySelectorAll('.pfb').forEach(function(b){b.classList.toggle('on',b.dataset.f===f)});rePl()}
+function ativarCod(){
+  var v=$('ac').value.replace(/\D/g,''),m=$('acm');
+  if(!v){m.textContent='Digite o código impresso na frente da placa (ex.: #00001).';return}
+  var cod='#'+v.padStart(5,'0'),p=PLATES.filter(function(x){return pc(x)===cod})[0];
+  if(!p){m.textContent='Não encontramos a placa '+cod+' na sua conta. Confira o código impresso na frente da placa.';return}
+  edPl(p.id)}
+function vPlacas(){head('Minhas placas','Ative as placas que você recebeu e configure o destino de cada uma.');
+  var nao=PLATES.filter(function(p){return p.status!=='ativa'}).length,sim=PLATES.length-nao;
+  return '<div class="card" style="margin-top:14px"><h3>Ativar uma placa</h3><p class="mut" style="margin:0 0 10px">Digite o <b>código de rastreio</b> que está impresso na frente da placa e configure o destino dela.</p>'
+  +'<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="ac" placeholder="#00001" inputmode="numeric" style="max-width:220px;font-size:18px;font-weight:700" onkeydown="if(event.key===\'Enter\')ativarCod()"><button class="btn p" onclick="ativarCod()">Ativar / configurar</button></div>'
+  +'<small class="mut" id="acm" style="display:block;margin-top:8px"></small></div>'
+  +'<div class="row" style="align-items:center"><button class="pill pfb'+(PF==='todas'?' on':'')+'" data-f="todas" onclick="setPF(\'todas\')">Todas ('+PLATES.length+')</button><button class="pill pfb'+(PF==='nao'?' on':'')+'" data-f="nao" onclick="setPF(\'nao\')">Não configuradas ('+nao+')</button><button class="pill pfb'+(PF==='sim'?' on':'')+'" data-f="sim" onclick="setPF(\'sim\')">Configuradas ('+sim+')</button>'
+  +'<input placeholder="Buscar por código, cliente ou nome da placa" value="'+E(PQ)+'" oninput="PQ=this.value;rePl()" style="max-width:340px;margin-left:auto"></div>'
+  +'<div id="plgrid">'+plGrid()+'</div>'}
+async function edPl(id){selPl=id;var t=new Date();t.setHours(0,0,0,0);
+  try{STATS[id]=await api('/resellers/plates/'+id+'/stats?since='+encodeURIComponent(t.toISOString()))}catch(e){STATS[id]={total:0,hoje:0,d7:0,d30:0,ultima:null}}
+  nav('placa')}
 function getPl(id){return PLATES.filter(function(x){return x.id===id})[0]}
 function qrUrl(p){return PUBLIC_BASE+'/r/'+p.code}
 function qrSvg(p){if(!window.qrcode)return '';var q=qrcode(0,'M');q.addData(qrUrl(p));q.make();var n=q.getModuleCount(),m=2,d='';for(var r=0;r<n;r++)for(var c=0;c<n;c++)if(q.isDark(r,c))d+='M'+(c+m)+' '+(r+m)+'h1v1h-1z';var z=n+2*m;return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+z+' '+z+'" shape-rendering="crispEdges"><rect width="'+z+'" height="'+z+'" fill="#fff"/><path d="'+d+'" fill="#000"/></svg>'}
+var TIPOS=['Google Avaliações','Instagram','Facebook','Site','Cardápio','Link personalizado'];
+var PH={'Google Avaliações':'https://g.page/r/sua-loja/review','Instagram':'https://instagram.com/seu_perfil','Facebook':'https://facebook.com/sua.pagina','Site':'https://www.seusite.com.br','Cardápio':'https://link-do-seu-cardapio.com','Link personalizado':'https://'};
+function phDest(){var i=$('f4');if(i)i.placeholder=PH[$('f3').value]||'https://'}
 function vPlaca(){var p=getPl(selPl);if(!p){cur='placas';return vPlacas()}
-head('Placa #'+pad(p.id),'<a style="color:var(--pr);cursor:pointer" onclick="nav(\'placas\')">← Voltar para minhas placas</a>');
-var rd=(p.reads||[]).map(function(x){return new Date(x.read_at).getTime()}),now=Date.now(),td=new Date().toDateString(),last=rd.length?new Date(Math.max.apply(null,rd)).toLocaleString('pt-BR'):'ainda nenhuma',c=function(f){return rd.filter(f).length},svg=qrSvg(p),
-T=['Google Avaliações','Instagram','WhatsApp','Site','Cardápio','Outro'],S=function(l,v){return '<div><small class="mut">'+l+'</small><b style="display:block;font-size:22px">'+v+'</b></div>'};
-return '<div class="g2"><div class="card"><small class="mut">SITUAÇÃO: <b style="color:var(--tx)">'+(p.status==='ativa'?'ATIVA':'NÃO CONFIGURADA')+'</b></small><div style="display:grid;gap:12px;margin-top:12px"><label>Nome do cliente / empresa<input id="f1" value="'+E(p.client_name)+'" placeholder="Ex.: Barbearia João"></label><label>Nome / identificação da placa<input id="f2" value="'+E(p.plate_label)+'" placeholder="Ex.: Barbearia João - Balcão"></label><label>Tipo de destino<select id="f3">'+T.map(function(t){return '<option'+(p.destination_type===t?' selected':'')+'>'+t+'</option>'}).join('')+'</select></label><label>Link de destino<input id="f4" value="'+E(p.destination_url)+'" placeholder="https://"></label><div><button class="btn p" onclick="svPl('+p.id+')">Salvar alterações</button></div><small class="mut">A placa continua a mesma. O QR Code e o NFC desta placa não mudam quando você altera o destino.</small></div></div>'+
-'<div class="card"><h3>QR Code da placa</h3><div style="text-align:center"><div style="width:220px;margin:auto;background:#fff;border-radius:8px">'+(svg||'<p class="mut" style="padding:20px">QR indisponível.</p>')+'</div><p class="mut" style="font-size:12px">Este QR Code é permanente. O destino pode ser alterado a qualquer momento.</p><div class="row" style="justify-content:center"><a class="btn" target="_blank" rel="noopener" href="'+E(qrUrl(p))+'">Testar link</a></div></div><hr style="border:0;border-top:1px solid var(--br);margin:16px 0"><div class="g2">'+S('Total de leituras',rd.length)+S('Hoje',c(function(t){return new Date(t).toDateString()===td}))+S('7 dias',c(function(t){return now-t<=7*864e5}))+S('30 dias',c(function(t){return now-t<=30*864e5}))+'</div><small class="mut">Última leitura: '+last+'</small></div></div>'}
-async function svPl(id){var u=$('f4').value.trim();
-try{await api('/resellers/plates/'+id,{method:'PUT',body:JSON.stringify({client_name:$('f1').value.trim(),plate_label:$('f2').value.trim(),destination_type:$('f3').value,destination_url:u})});await loadPlates();draw()}
-catch(e){alert(e.message)}}
+head('Placa '+E(pc(p)),'<a style="color:var(--pr);cursor:pointer" onclick="nav(\'placas\')">← Voltar para minhas placas</a>');
+var st=STATS[p.id]||{total:0,hoje:0,d7:0,d30:0,ultima:null},svg=qrSvg(p),tipos=TIPOS.slice();
+if(p.destination_type&&tipos.indexOf(p.destination_type)<0)tipos.push(p.destination_type);
+var S=function(l,v){return '<div><small class="mut">'+l+'</small><b style="display:block;font-size:22px">'+v+'</b></div>'};
+var cfg='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Configuração da placa</h3><span>Situação: '+plTag(p)+'</span></div>'
++'<div style="display:grid;gap:12px;margin-top:14px">'
++'<label>Código da placa<input id="f0" value="'+E(pc(p))+'" placeholder="#00001" style="font-weight:700"><small class="mut">Código de rastreio impresso na frente da placa.</small></label>'
++'<label>Nome do cliente / empresa<input id="f1" value="'+E(p.client_name)+'" placeholder="Ex.: Barbearia João"></label>'
++'<label>Nome / identificação da placa<input id="f2" value="'+E(p.plate_label)+'" placeholder="Ex.: Barbearia João - Balcão"></label>'
++'<label>Tipo de destino<select id="f3" onchange="phDest()">'+tipos.map(function(t){return '<option'+(p.destination_type===t?' selected':'')+'>'+E(t)+'</option>'}).join('')+'</select></label>'
++'<label>Link de destino<input id="f4" value="'+E(p.destination_url)+'" placeholder="https://" inputmode="url" autocapitalize="off"><small class="mut">Cole o link para onde o cliente vai ao aproximar o celular ou ler o QR Code.</small></label>'
++'<div><button class="btn p" onclick="svPl('+p.id+')">Salvar alterações</button></div>'
++'<small class="mut">A placa continua a mesma: o QR Code e o NFC não mudam quando você altera o destino.</small></div>'
++'<hr style="border:0;border-top:1px solid var(--br);margin:18px 0 14px"><h3 style="margin-bottom:12px">Leituras da placa</h3>'
++'<div class="g2" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">'+S('Total de leituras',st.total)+S('Hoje',st.hoje)+S('7 dias',st.d7)+S('30 dias',st.d30)+'</div>'
++'<p class="mut" style="margin:12px 0 4px">Última leitura: <b style="color:var(--tx)">'+(fuso(st.ultima)||'ainda nenhuma')+'</b></p>'
++'<p class="mut" style="margin:0;overflow-wrap:anywhere">Destino atual: '+(p.destination_url?'<a style="color:var(--pr)" target="_blank" rel="noopener" href="'+E(p.destination_url)+'">'+E(p.destination_url)+'</a>':'<b style="color:var(--tx)">sem destino</b>')+'</p></div>';
+var qr='<div class="card"><h3>QR Code da placa</h3><div style="text-align:center"><div style="width:220px;max-width:100%;margin:auto;background:#fff;border-radius:8px">'+(svg||'<p class="mut" style="padding:20px">QR indisponível.</p>')+'</div><p class="mut" style="font-size:12px">Este QR Code é permanente. O destino pode ser alterado a qualquer momento.</p><div class="row" style="justify-content:center"><a class="btn" target="_blank" rel="noopener" href="'+E(qrUrl(p))+'">Testar link</a></div></div></div>';
+return '<div class="g2" style="align-items:start">'+cfg+qr+'</div>'}
+async function svPl(id){
+  try{var r=await api('/resellers/plates/'+id,{method:'PUT',body:JSON.stringify({tracking_code:$('f0').value.trim(),client_name:$('f1').value.trim(),plate_label:$('f2').value.trim(),destination_type:$('f3').value,destination_url:$('f4').value.trim()})});
+    await loadPlates();draw();toast(r.status==='ativa'?'Placa configurada ✓':'Alterações salvas ✓ (falta o link de destino para configurar)')}
+  catch(e){alert(e.message)}}
 
 /* ---- vendas ---- */
 function vVendas(){head('Vendas','Registre e acompanhe suas vendas.');var a=SALES.filter(inP);
-return '<div class="row"><button class="btn p" onclick="nvSale()">＋ Registrar venda</button></div>'+pills()+'<div class="card"><div class="tw"><table><tr><th>Data</th><th>Cliente</th><th>Placa</th><th>Valor</th><th>Lucro</th><th></th></tr>'+(a.length?a.map(function(x){return '<tr><td>'+fd(x.created_at)+'</td><td>'+E(x.client_name)+'</td><td>'+(x.plate_id?'#'+pad(x.plate_id):'—')+'</td><td>'+R(x.value)+'</td><td>'+R(x.value-(x.cost||0))+'</td><td><button class="btn s" onclick="dlS('+x.id+')">✕</button></td></tr>'}).join(''):'<tr><td colspan="6" class="mut">Nenhuma venda registrada.</td></tr>')+'</table></div></div>'}
-function nvSale(){var es=PLATES.filter(function(p){return p.status==='estoque'});mo('<h3 style="margin:0">Registrar venda</h3><label>Cliente / estabelecimento<input id="m1"></label><label>Placa do estoque<select id="m3"><option value="">— sem vincular —</option>'+es.map(function(p){return '<option value="'+p.id+'">#'+pad(p.id)+' · '+p.color+'</option>'}).join('')+'</select></label><label>Valor da venda (R$)<input id="m2" type="number" step="0.01" min="0" value="60"></label><label>Link de avaliação do Google (opcional)<input id="m4" placeholder="https://…"></label><div class="row"><button class="btn p" onclick="svSale()">Salvar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
+return '<div class="row"><button class="btn p" onclick="nvSale()">＋ Registrar venda</button></div>'+pills()+'<div class="card"><div class="tw"><table><tr><th>Data</th><th>Cliente</th><th>Placa</th><th>Valor</th><th>Lucro</th><th></th></tr>'+(a.length?a.map(function(x){return '<tr><td>'+fd(x.created_at)+'</td><td>'+E(x.client_name)+'</td><td>'+(x.plate_id?E(plLabel(x.plate_id)):'—')+'</td><td>'+R(x.value)+'</td><td>'+R(x.value-(x.cost||0))+'</td><td><button class="btn s" onclick="dlS('+x.id+')">✕</button></td></tr>'}).join(''):'<tr><td colspan="6" class="mut">Nenhuma venda registrada.</td></tr>')+'</table></div></div>'}
+function nvSale(){var es=PLATES.filter(function(p){return p.status==='estoque'});mo('<h3 style="margin:0">Registrar venda</h3><label>Cliente / estabelecimento<input id="m1"></label><label>Placa (não configurada)<select id="m3"><option value="">— sem vincular —</option>'+es.map(function(p){return '<option value="'+p.id+'">'+E(pc(p))+' · '+p.color+(p.client_name?' · '+E(p.client_name):'')+'</option>'}).join('')+'</select></label><label>Valor da venda (R$)<input id="m2" type="number" step="0.01" min="0" value="60"></label><label>Link de avaliação do Google (opcional)<input id="m4" placeholder="https://…"></label><div class="row"><button class="btn p" onclick="svSale()">Salvar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
 async function svSale(){var c=$('m1').value.trim(),v=+$('m2').value,pid=+$('m3').value||null,u=$('m4').value.trim();if(!c||!(v>=0))return alert('Informe cliente e valor.');
 try{await api('/resellers/sales',{method:'POST',body:JSON.stringify({client_name:c,value:v,plate_id:pid,destination_url:u})});await Promise.all([loadSales(),loadPlates()]);cl();draw()}catch(e){alert(e.message)}}
 async function dlS(id){if(!confirm('Excluir venda?'))return;try{await api('/resellers/sales/'+id,{method:'DELETE'});await loadSales();draw()}catch(e){alert(e.message)}}
@@ -322,9 +377,43 @@ function vPedidos(){head('Meus pedidos','Acompanhe suas compras de placas.');
 return '<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th>Status</th></tr>'+(ORDERS.length?ORDERS.map(function(o){return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td></tr>'}).join(''):'<tr><td colspan="8" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
 
 /* ---- conta / academy ---- */
-function vConta(){head('Minha conta','Seus dados de revendedor.');
-return '<div class="card" style="max-width:460px;display:grid;gap:10px"><label>Nome<input id="c1" value="'+E(ME.name)+'"></label><label>E-mail<input value="'+E(ME.email)+'" disabled></label><label>WhatsApp<input id="c2" value="'+E(ME.whatsapp)+'"></label><div class="row"><button class="btn p" onclick="svC()">Salvar</button><button class="btn" onclick="out()">Sair</button></div></div>'}
-async function svC(){try{await api('/resellers/me',{method:'PUT',body:JSON.stringify({name:$('c1').value.trim(),whatsapp:$('c2').value.trim()})});ME=await api('/resellers/me');$('un').textContent=ME.name;$('av').textContent=ME.name.charAt(0).toUpperCase();alert('Salvo!')}catch(e){alert(e.message)}}
+function vConta(){head('Minha conta','Seus dados e o endereço usado nas entregas.');
+  var m=ME||{},g=function(k){return E(m[k]||'')};
+  return '<div class="g2" style="align-items:start"><div class="card" style="display:grid;gap:12px"><h3 style="margin:0">Dados do revendedor</h3>'
+  +'<label>Nome<input id="c1" value="'+g('name')+'" autocomplete="name"></label>'
+  +'<label>E-mail<input value="'+g('email')+'" disabled></label>'
+  +'<label>WhatsApp<input id="c2" value="'+g('whatsapp')+'" inputmode="tel" autocomplete="tel" placeholder="(75) 90000-0000"></label>'
+  +'<div class="row"><button class="btn" onclick="out()">Sair da conta</button></div></div>'
+  +'<div class="card" style="display:grid;gap:12px"><h3 style="margin:0">Endereço completo</h3><small class="mut" style="margin-top:-6px">Digite o CEP e preenchemos o resto. Usamos este endereço nas entregas e no comprovante operacional.</small>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>CEP<input id="a1" value="'+g('addr_cep')+'" inputmode="numeric" maxlength="9" placeholder="00000-000" oninput="buscaCepConta()" autocomplete="postal-code"></label>'
+  +'<label>Número<input id="a3" value="'+g('addr_number')+'" placeholder="S/N se não houver"></label></div>'
+  +'<small class="mut" id="a0" style="margin-top:-6px"></small>'
+  +'<label>Rua / Avenida<input id="a2" value="'+g('addr_street')+'" autocomplete="address-line1"></label>'
+  +'<label>Complemento (opcional)<input id="a4" value="'+g('addr_complement')+'" placeholder="Apto, bloco, ponto de referência"></label>'
+  +'<label>Bairro<input id="a5" value="'+g('addr_district')+'"></label>'
+  +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px"><label>Cidade<input id="a6" value="'+g('addr_city')+'"></label><label>Estado (UF)<input id="a7" value="'+g('addr_state')+'" maxlength="2" placeholder="BA" style="text-transform:uppercase"></label></div>'
+  +'<label>País<input id="a8" value="'+E(m.addr_country||'Brasil')+'"></label>'
+  +'<div class="row"><button class="btn p" onclick="svC()">Salvar dados</button></div></div></div>'}
+var cepContaLast='';
+function buscaCepConta(){
+  var i=$('a1');if(!i)return;var d=i.value.replace(/\D/g,''),msg=$('a0');
+  if(d.length!==8){cepContaLast='';if(msg)msg.textContent='';return}
+  if(d===cepContaLast)return;cepContaLast=d;if(msg)msg.textContent='Buscando endereço…';
+  fetch('https://viacep.com.br/ws/'+d+'/json/').then(function(r){return r.json()}).then(function(j){
+    if(!$('a2'))return;
+    if(j.erro){if($('a0'))$('a0').textContent='CEP não encontrado. Preencha o endereço manualmente.';return}
+    $('a2').value=j.logradouro||$('a2').value;$('a5').value=j.bairro||$('a5').value;$('a6').value=j.localidade||$('a6').value;$('a7').value=j.uf||$('a7').value;$('a8').value='Brasil';
+    if($('a0'))$('a0').textContent='Endereço preenchido. Confira e informe o número.';
+    if(!$('a3').value)$('a3').focus();
+  }).catch(function(){if($('a0'))$('a0').textContent='Não consegui buscar o CEP agora. Preencha o endereço manualmente.'});
+}
+async function svC(){
+  var v=function(id){return $(id).value.trim()};
+  var cep=v('a1').replace(/\D/g,'');if(cep&&cep.length!==8){$('a1').focus();return alert('CEP inválido: informe os 8 números.')}
+  try{
+    await api('/resellers/me',{method:'PUT',body:JSON.stringify({name:v('c1'),whatsapp:v('c2'),addr_cep:cep,addr_street:v('a2'),addr_number:v('a3'),addr_complement:v('a4'),addr_district:v('a5'),addr_city:v('a6'),addr_state:v('a7').toUpperCase(),addr_country:v('a8')||'Brasil'})});
+    ME=await api('/resellers/me');$('un').textContent=ME.name;$('av').textContent=ME.name.charAt(0).toUpperCase();toast('Dados salvos ✓')
+  }catch(e){alert(e.message)}}
 function vAcad(){head('NFC Academy','Aprenda a configurar, apresentar e vender suas placas.');var les=lsLes(),done=Object.keys(les).filter(function(k){return les[k]}).length;
 return '<div class="card"><div class="pg"><i style="width:'+Math.round(done/LES.length*100)+'%"></i></div><small class="mut">'+done+' de '+LES.length+' aulas concluídas</small>'+LES.map(function(l,i){return '<div class="qty"><span><b>'+(i+1)+'.</b> '+E(l)+'</span><button class="btn s" onclick="ls('+i+')" style="width:auto;height:auto">'+(les[i]?'✔ Concluída':'Marcar como concluída')+'</button></div>'}).join('')+'</div>'}
 function ls(i){var les=lsLes();les[i]=!les[i];svLes(les);draw()}

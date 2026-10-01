@@ -46,14 +46,14 @@ async function enviarEmail(para, nome, link) {
   return r.ok;
 }
 
-// Limite simples: 5 pedidos a cada 15 minutos por IP.
+// Limite simples: por padrão 5 tentativas a cada 15 minutos para a mesma chave.
 const tentativas = new Map();
-function limitado(chave) {
+function limitado(chave, max = 5) {
   const agora = Date.now();
   const lista = (tentativas.get(chave) || []).filter(t => agora - t < 15 * 60 * 1000);
   lista.push(agora);
   tentativas.set(chave, lista);
-  return lista.length > 5;
+  return lista.length > max;
 }
 
 module.exports = { criarLink, validar, consumir, enviarEmail, limitado };

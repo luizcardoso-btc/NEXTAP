@@ -278,8 +278,20 @@ function generatePlatesForOrder(orderId) {
   const insert = db.prepare(
     `INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)`
   );
-  for (let i = 0; i < order.qty_azul; i++) insert.run(order.reseller_id, order.id, nanoid(10), 'azul', order.unit_price);
-  for (let i = 0; i < order.qty_preta; i++) insert.run(order.reseller_id, order.id, nanoid(10), 'preta', order.unit_price);
+  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ?');
+  const gravaCodigo = db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?');
+  // Código de rastreio impresso na frente da placa: #00001, #00002… (pula números já usados)
+  const novoCodigo = id => {
+    let n = id, c;
+    do { c = '#' + String(n).padStart(5, '0'); n++; } while (existe.get(c));
+    return c;
+  };
+  const criar = cor => {
+    const r = insert.run(order.reseller_id, order.id, nanoid(10), cor, order.unit_price);
+    gravaCodigo.run(novoCodigo(Number(r.lastInsertRowid)), r.lastInsertRowid);
+  };
+  for (let i = 0; i < order.qty_azul; i++) criar('azul');
+  for (let i = 0; i < order.qty_preta; i++) criar('preta');
 }
 
 router.diagnose = diagnose;

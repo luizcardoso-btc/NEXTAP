@@ -1,5 +1,9 @@
 const express = require('express');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const db = require('./database.js');
 const senha = require('./senha.js');
 const { requireAdmin } = require('./auth-middleware.js');
@@ -35,9 +39,72 @@ router.get('/backup', (req, res) => {
   }
 });
 
-// Situação do armazenamento e dos backups automáticos.
+// Situação do armazenamento, contagens e backups (tela "Dados e backups").
 router.get('/sistema', (req, res) => {
-  res.json({ dados_persistentes: db.meta.persistente, backups: db.listarBackups() });
+  res.json({
+    dados_persistentes: db.meta.persistente,
+    integridade: db.integridade(),
+    contagens: db.contagens(),
+    backups: db.listarBackups(),
+  });
+});
+
+// Restaurar a partir de um backup que já está guardado no servidor (pasta backups/ do Volume).
+router.post('/restore-local', (req, res) => {
+  const { nome, modo } = req.body || {};
+  const arquivo = path.join(db.meta.backupDir, path.basename(String(nome || '')));
+  if (!/\.db$/.test(arquivo) || !fs.existsSync(arquivo)) return res.status(404).json({ error: 'Backup não encontrado no servidor.' });
+  if (!['substituir', 'revendedores'].includes(modo)) return res.status(400).json({ error: 'Escolha como restaurar.' });
+  try { res.json(db.restaurar(arquivo, modo)); }
+  catch (e) { console.error('[DB] Falha ao restaurar:', e.message); res.status(400).json({ error: e.message }); }
+});
+
+// Restaurar a partir de um arquivo .db enviado pelo painel (o backup que você baixou).
+router.post('/restore', express.raw({ type: () => true, limit: '80mb' }), (req, res) => {
+  const modo = String(req.query.modo || '');
+  if (!['substituir', 'revendedores'].includes(modo)) return res.status(400).json({ error: 'Escolha como restaurar.' });
+  if (!Buffer.isBuffer(req.body) || req.body.length < 512) return res.status(400).json({ error: 'Nenhum arquivo recebido.' });
+  const tmp = path.join(os.tmpdir(), `restore-${crypto.randomBytes(6).toString('hex')}.db`);
+  try {
+    fs.writeFileSync(tmp, req.body);
+    res.json(db.restaurar(tmp, modo));
+  } catch (e) {
+    console.error('[DB] Falha ao restaurar upload:', e.message);
+    res.status(400).json({ error: e.message });
+  } finally { fs.unlink(tmp, () => {}); }
+});
+
+// Lista de revendedores em planilha (CSV abre no Excel/Google Planilhas) — outra forma de guardar uma cópia.
+const csvCel = v => {
+  let t = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; // evita fórmulas maliciosas ao abrir no Excel
+  return '"' + t.replace(/"/g, '""') + '"';
+};
+router.get('/export/revendedores', (req, res) => {
+  const rows = db.prepare(`
+    SELECT r.id, r.name, r.email, r.whatsapp, r.created_at,
+      r.addr_cep, r.addr_street, r.addr_number, r.addr_complement, r.addr_district, r.addr_city, r.addr_state, r.addr_country,
+      (SELECT COUNT(*) FROM orders o WHERE o.reseller_id = r.id) AS pedidos,
+      (SELECT COUNT(*) FROM plates p WHERE p.reseller_id = r.id) AS placas
+    FROM resellers r ORDER BY r.id`).all();
+  const cab = ['ID', 'Nome', 'E-mail', 'WhatsApp', 'Cadastro', 'CEP', 'Rua', 'Número', 'Complemento', 'Bairro', 'Cidade', 'UF', 'País', 'Pedidos', 'Placas'];
+  const linhas = rows.map(r => [r.id, r.name, r.email, r.whatsapp, r.created_at, r.addr_cep, r.addr_street, r.addr_number,
+    r.addr_complement, r.addr_district, r.addr_city, r.addr_state, r.addr_country, r.pedidos, r.placas].map(csvCel).join(';'));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="nextap-revendedores-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send('\ufeff' + [cab.map(csvCel).join(';'), ...linhas].join('\r\n'));
+});
+
+// Cadastro manual de um revendedor (para reativar quem já tinha conta): cria a conta e devolve o link para ele escolher a senha.
+router.post('/resellers', async (req, res) => {
+  const { name, email, whatsapp } = req.body || {};
+  const em = String(email || '').toLowerCase().trim();
+  if (!String(name || '').trim() || !em.includes('@')) return res.status(400).json({ error: 'Informe nome e e-mail válidos.' });
+  if (db.prepare('SELECT 1 FROM resellers WHERE email = ?').get(em)) return res.status(409).json({ error: 'Já existe um revendedor com esse e-mail.' });
+  const hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10); // senha aleatória; ele define a dele pelo link
+  const info = db.prepare('INSERT INTO resellers (name, email, whatsapp, password_hash) VALUES (?, ?, ?, ?)')
+    .run(String(name).trim().slice(0, 120), em, String(whatsapp || '').trim().slice(0, 30), hash);
+  res.json({ id: info.lastInsertRowid, link: senha.criarLink(req, info.lastInsertRowid, 72) });
 });
 
 router.get('/resellers', (req, res) => {

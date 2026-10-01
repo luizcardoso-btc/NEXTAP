@@ -29,3 +29,25 @@ configurado, o link aparece nos logs do Railway e o admin pode gerar o link em *
 4. **Backup manual:** botão **⬇ Backup** no painel admin baixa uma cópia completa (`.db`).
 
 Nunca suba um arquivo `nextap.db` para o GitHub (o `.gitignore` já bloqueia).
+
+## Minhas placas (painel do revendedor)
+- Cada placa tem um **código de rastreio** impresso na frente (`#00001`, `#00002`…), gerado quando o pedido é pago.
+  O revendedor pode digitar o código em **Ativar uma placa** para abrir a configuração dela.
+- Configuração: código, nome do cliente/empresa, nome/identificação da placa, tipo de destino (Google Avaliações,
+  Instagram, Facebook, Site, Cardápio, Link personalizado) e link. **Configurada** = tem link de destino.
+- O QR Code e o NFC da placa nunca mudam; só o destino é alterado.
+- Leituras: total, hoje, 7 dias, 30 dias, última leitura e destino atual.
+
+## Minha conta (painel do revendedor)
+Dados do revendedor + endereço completo (CEP, rua, número, complemento, bairro, cidade, UF, país). Ao digitar o CEP,
+o restante é preenchido sozinho (ViaCEP). O endereço já vem preenchido no checkout e será usado no comprovante operacional.
+
+## Proteção e recuperação dos dados (admin → Gestão → 🛡 Dados e backups)
+- **Cópias automáticas** no Volume: 1 por dia, 1 a cada vez que o sistema liga (cada deploy) e 1 antes de cada
+  atualização da estrutura do banco.
+- **Baixar backup** (.db) e **lista de revendedores** (planilha CSV) para guardar no seu computador.
+- **Restaurar:** de um arquivo .db enviado, ou de um backup guardado no servidor. Dois modos:
+  *só recuperar revendedores que faltam* (não apaga nada) ou *substituir tudo*. Antes de restaurar, o sistema guarda
+  uma cópia do estado atual — dá para desfazer.
+- **Reativar um revendedor:** cadastro manual que gera o link para a pessoa criar a senha.
+- Proteções extras: limite de tentativas de login, verificação de integridade ao ligar, gravação segura em disco.

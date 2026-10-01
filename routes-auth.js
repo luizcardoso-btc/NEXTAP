@@ -33,6 +33,9 @@ router.post('/register', async (req, res) => {
 // Login de revendedor
 router.post('/login', async (req, res) => {
   const { email, password } = req.body || {};
+  if (senha.limitado('login:' + req.ip + ':' + String(email || '').toLowerCase(), 10)) {
+    return res.status(429).json({ error: 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.' });
+  }
   const r = db.prepare('SELECT * FROM resellers WHERE email = ?').get(String(email || '').toLowerCase().trim());
   if (!r) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
   const ok = await bcrypt.compare(password || '', r.password_hash);

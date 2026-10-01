@@ -1,0 +1,13 @@
+diff --git a/server.js b/server.js
+index f6e1b91..c9f3d3e 100644
+--- a/server.js
++++ b/server.js
+@@ -28,6 +28,8 @@ app.use('/api/auth', require('./routes-auth.js'));
+ app.use('/api/resellers', require('./routes-resellers.js'));
+ app.use('/api/payments', require('./routes-payments.js'));
+ app.use('/api/admin', require('./routes-admin.js'));
++app.use('/api/admin', require('./backup-externo.js')); // backup externo por e-mail (POST /api/admin/backup-email)
++app.use('/', require('./routes-restore.js')); // restauração de backup (página /admin/restaurar + API)
+ app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / NFC da placa e /api/public/stats
+ 
+ // Site (/), painel do revendedor (/revendedor) e painel admin (/admin) — servidos pelo próprio backend,
