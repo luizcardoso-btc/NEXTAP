@@ -180,6 +180,7 @@ async function loadTiers(){TIERS=await api('/resellers/price-tiers')}
 async function loadPlates(){PLATES=await api('/resellers/plates')}
 async function loadSales(){SALES=await api('/resellers/sales')}
 async function loadOrders(){ORDERS=await api('/resellers/orders')}
+function minQ(){return TIERS.length?TIERS[0].min_qty:1}
 function price(n){for(var i=0;i<TIERS.length;i++)if(n>=TIERS[i].min_qty&&n<=TIERS[i].max_qty)return TIERS[i].unit_price;return TIERS.length?TIERS[0].unit_price:25}
 
 /* ---- navegação ---- */
@@ -288,13 +289,13 @@ async function dlS(id){if(!confirm('Excluir venda?'))return;try{await api('/rese
 
 /* ---- comprar (checkout real com Mercado Pago) ---- */
 function vComprar(){head('Comprar placas','Quanto mais você compra, menor o custo por placa.');var n=N.azul+N.preta,u=n?price(n):0;
-return '<div class="g2"><div class="card"><h3>Tabela de preços</h3>'+TIERS.map(function(t){var l=t.max_qty>=1000000?t.min_qty+'+ placas':t.min_qty===t.max_qty?'1 placa':t.min_qty+' a '+t.max_qty+' placas';return '<div class="tier '+(n>=t.min_qty&&n<=t.max_qty?'on':'')+'"><span>'+l+'</span><span>'+R(t.unit_price)+'</span></div>'}).join('')+'<small class="mut">Acrílico 2 mm · 10×10 cm · NFC + QR Code dinâmico · fita dupla face</small></div>'+
-'<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n*u)+'</b></div><br><button class="btn p" style="width:100%" onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.</small></div></div>'}
+return '<div class="g2"><div class="card"><h3>Tabela de preços</h3>'+TIERS.map(function(t){var l=t.max_qty>=1000000?t.min_qty+' a ∞ placas':t.min_qty===t.max_qty?t.min_qty+' placa'+(t.min_qty>1?'s':''):t.min_qty+' a '+t.max_qty+' placas';return '<div class="tier '+(n>=t.min_qty&&n<=t.max_qty?'on':'')+'"><span>'+l+'</span><span>'+R(t.unit_price)+'</span></div>'}).join('')+'<small class="mut">Pedido mínimo: <b style="color:var(--tx)">'+minQ()+' placas</b> (azuis, pretas ou as duas juntas).<br>Acrílico 2 mm · 10×10 cm · NFC + QR Code dinâmico · fita dupla face</small></div>'+
+'<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n*u)+'</b></div><br>'+(n<minQ()?'<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam '+(minQ()-n)+' placa(s) para o pedido mínimo de '+minQ()+'.</p>':'')+'<button class="btn p" style="width:100%" '+(n<minQ()?'disabled':'')+' onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.</small></div></div>'}
 function q(c,d){N[c]=Math.max(0,N[c]+d);draw()}
 var LASTFORM=null,cepLast='';
 function fl(id,label,val,extra){return '<label>'+label+'<input id="'+id+'" value="'+E(val||'')+'" '+(extra||'')+'></label>'}
 function openCheckout(pre){
-  var n=N.azul+N.preta;if(!n)return alert('Escolha ao menos 1 placa.');
+  var n=N.azul+N.preta;if(!n)return alert('Escolha ao menos 1 placa.');if(n<minQ())return alert('O pedido mínimo é de '+minQ()+' placas. Você escolheu '+n+'.');
   var u=price(n),f=pre||LASTFORM||{},a=f.ship||{};
   var fname=f.first_name!=null?f.first_name:ME.name.split(' ')[0],lname=f.last_name!=null?f.last_name:ME.name.split(' ').slice(1).join(' ');
   var g=function(k,dflt){return a[k]!=null?a[k]:(dflt||'')};

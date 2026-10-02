@@ -64,7 +64,7 @@ app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / N
 
 // Site (/), painel do revendedor (/revendedor) e painel admin (/admin) — servidos pelo próprio backend,
 // no mesmo domínio da API, então não há problema de CORS.
-['logo.png', 'placa.jpg', 'favicon.png'].forEach(f =>
+['logo.png', 'placa.jpg', 'placas-nextap.jpg', 'favicon.png'].forEach(f =>
   app.get('/' + f, (req, res) => res.sendFile(path.join(__dirname, f), { maxAge: '1d' })));
 const page = f => (req, res) => res.sendFile(path.join(__dirname, f));
 app.get('/', page('site.html'));

@@ -38,7 +38,7 @@ details{border:1px solid var(--br);border-radius:12px;padding:14px 18px;margin-b
 footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--mut)}
 .wa{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));width:54px;height:54px;border-radius:50%;background:#22c55e;color:#fff;display:grid;place-items:center;font-size:26px;box-shadow:0 6px 18px #0004;z-index:8}
 .plate{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}.plate .grid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));text-align:left}
-.float{position:relative;display:flex;justify-content:center;padding:18px 0 34px}.float img{width:100%;max-width:400px;border-radius:24px;animation:fl 5.5s ease-in-out infinite;box-shadow:0 34px 60px -22px #0a5c2f59}
+.float{position:relative;display:flex;justify-content:center;padding:18px 0 34px}.float img{width:100%;max-width:460px;height:auto;border-radius:24px;animation:fl 5.5s ease-in-out infinite;box-shadow:0 34px 60px -22px #0a5c2f59}
 .float:after{content:"";position:absolute;left:50%;bottom:6px;width:62%;height:22px;margin-left:-31%;background:radial-gradient(ellipse at center,#0a5c2f40,transparent 70%);animation:sh 5.5s ease-in-out infinite}
 @keyframes fl{0%,100%{transform:translateY(0) rotate(-1.6deg)}50%{transform:translateY(-18px) rotate(1.6deg)}}
 @keyframes sh{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(.82);opacity:.55}}
@@ -53,7 +53,7 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 </div></header>
 
 <div class="w hero" id="top"><div>
-<span class="tag">ATACADO · A PARTIR DE R$ 15,00 POR PLACA</span>
+<span class="tag" id="tagLow">ATACADO · A PARTIR DE R$ 15,90 POR PLACA</span>
 <h1>Placas de avaliação <span class="grad-tx">Google</span> com NFC + QR Code dinâmico.</h1>
 <p class="mut">Acrílico premium, prontas para revenda ou uso no seu negócio. Aproximou o celular, o cliente já avalia.</p>
 <div class="row"><a class="btn p" id="lnkCriar2" href="#">Criar conta grátis e comprar placas</a><a class="btn" href="#placa">Ver a placa</a></div>
@@ -70,7 +70,7 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <p class="mut">Todo negócio local quer mais avaliações no Google.</p>
 <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))"><div class="card">🍽 Restaurantes</div><div class="card">✂ Barbearias</div><div class="card">💇 Salões</div><div class="card">🩺 Clínicas</div><div class="card">🛍 Lojas</div><div class="card">🏋 Academias</div><div class="card">🏢 Escritórios</div><div class="card">🏪 Comércios</div></div></div></section>
 
-<section id="placa"><div class="w plate"><div class="pt"><span class="tag">A PLACA</span><h2>Tudo que ela precisa, já integrado.</h2><p class="mut">Acrílico premium com NFC e QR Code dinâmico. Um toque e o cliente já está na sua página de avaliação.</p><div class="grid"><div class="card"><b>01 · Acrílico premium</b><span class="mut">Acabamento profissional, com ou sem base preta.</span></div><div class="card"><b>02 · NFC integrado</b><span class="mut">Acesso por aproximação, sem precisar abrir a câmera.</span></div><div class="card"><b>03 · QR Code dinâmico</b><span class="mut">Troque o destino sem reimprimir a placa.</span></div><div class="card"><b>04 · Fita dupla face</b><span class="mut">Fixação fácil no balcão ou na parede.</span></div><div class="card"><b>05 · Película protetora</b><span class="mut">Protege no transporte e no dia a dia.</span></div></div></div><div class="float"><img src="/placa.jpg" alt="Placa NexTap de avaliação do Google com NFC e QR Code" loading="lazy"></div></div></section>
+<section id="placa"><div class="w plate"><div class="pt"><span class="tag">A PLACA</span><h2>Tudo que ela precisa, já integrado.</h2><p class="mut">Acrílico premium com NFC e QR Code dinâmico. Um toque e o cliente cai direto no destino que você escolher: avaliações do Google, Instagram, WhatsApp, cardápio ou site.</p><div class="grid"><div class="card"><b>01 · Acrílico premium</b><span class="mut">Acabamento profissional, com ou sem base preta.</span></div><div class="card"><b>02 · NFC integrado</b><span class="mut">Acesso por aproximação, sem precisar abrir a câmera.</span></div><div class="card"><b>03 · QR Code dinâmico</b><span class="mut">Troque o destino sem reimprimir a placa.</span></div><div class="card"><b>04 · Fita dupla face</b><span class="mut">Fixação fácil no balcão ou na parede.</span></div><div class="card"><b>05 · Película protetora</b><span class="mut">Protege no transporte e no dia a dia.</span></div></div></div><div class="float"><img src="/placas-nextap.jpg" alt="Placas NexTap para avaliações do Google, Instagram e WhatsApp, com NFC e QR Code" width="1024" height="1280" loading="lazy"></div></div></section>
 
 <section class="s"><div class="w c"><span class="tag">COMO FUNCIONA</span><h2>Do cadastro ao seu cliente final.</h2>
 <div class="grid"><div class="card"><b>1. Crie sua conta</b><span class="mut">Cadastro gratuito, em menos de 1 minuto.</span></div><div class="card"><b>2. Compre no painel</b><span class="mut">Escolha a quantidade e pague por Pix ou cartão.</span></div><div class="card"><b>3. Configure</b><span class="mut">Defina o link do Google de cada cliente.</span></div><div class="card"><b>4. Entregue</b><span class="mut">Instale e finalize a venda.</span></div></div></div></section>
@@ -85,7 +85,7 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <small class="mut">Sem pedido mínimo · Pix ou cartão de crédito pelo Mercado Pago · já tem conta? <a id="lnkEntrar2" href="#" style="color:var(--pr2);font-weight:700">Entrar</a></small></div></div></div></section>
 
 <section class="s" id="faq"><div class="w" style="max-width:760px"><div class="c"><span class="tag">FAQ</span><h2>Perguntas frequentes</h2></div><br>
-<details><summary>Existe pedido mínimo?</summary><p class="mut">Não. Você pode comprar a partir de 1 placa direto no seu painel.</p></details>
+<details><summary>Existe pedido mínimo?</summary><p class="mut" id="faqMin">Sim. O pedido mínimo é de 5 placas (azuis, pretas ou as duas juntas), feito direto no seu painel.</p></details>
 <details><summary>O QR Code é dinâmico?</summary><p class="mut">Sim. É possível alterar o destino depois, sem trocar a placa.</p></details>
 <details><summary>O NFC já vem integrado?</summary><p class="mut">Sim, todas as placas acompanham NFC.</p></details>
 <details><summary>Como eu compro as placas?</summary><p class="mut">Crie sua conta gratuita de revendedor, escolha a quantidade no seu painel e pague por Pix ou cartão de crédito.</p></details>
@@ -104,18 +104,25 @@ var APP_URL = "/revendedor/"; // painel do revendedor (mesmo domínio)
 var WHATS = "5575988209055";
 /* ======================= */
 
-var TIERS=[[1,1,21.9],[2,49,17.5],[50,299,16.5],[300,1e9,15.9]],N={azul:25,preta:25};
+var TIERS=[[5,10,21.9],[11,49,17.5],[50,299,16.5],[300,1e9,15.9]],MINQ=5,N={azul:25,preta:25};
 function R(n){return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function price(n){for(var i=0;i<TIERS.length;i++)if(n>=TIERS[i][0]&&n<=TIERS[i][1])return TIERS[i][2];return TIERS[0][2]}
+function tl(t){return t[1]>=1e9?t[0]+' a ∞ placas':t[0]===t[1]?t[0]+' placa'+(t[0]>1?'s':''):t[0]+' a '+t[1]+' placas'}
 function theme(){var r=document.documentElement,d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);r.dataset.theme=d?'light':'dark'}
 
-document.getElementById('tiers').innerHTML=TIERS.map(function(t,i){var l=t[1]===1e9?t[0]+' placas ou mais':t[0]===t[1]?'1 placa':t[0]+' a '+t[1]+' placas';return '<div class="'+(i==3?'best':'')+'"><span>'+l+(i==3?' <span class="tag">MELHOR PREÇO</span>':'')+'</span><b>'+R(t[2])+'</b></div>'}).join('');
+function renderTiers(){
+document.getElementById('tiers').innerHTML=TIERS.map(function(t,i){var last=i===TIERS.length-1;return '<div class="'+(last?'best':'')+'"><span>'+tl(t)+(last?' <span class="tag">MELHOR PREÇO</span>':'')+'</span><b>'+R(t[2])+'</b></div>'}).join('');
+document.getElementById('tagLow').textContent='ATACADO · A PARTIR DE '+R(TIERS[TIERS.length-1][2])+' POR PLACA';
+document.getElementById('faqMin').textContent='Sim. O pedido mínimo é de '+MINQ+' placas (azuis, pretas ou as duas juntas), feito direto no seu painel.'}
+renderTiers();
+(async function(){try{var r=await fetch(API_BASE+'/public/price-tiers');var j=await r.json();
+if(j&&j.tiers&&j.tiers.length){TIERS=j.tiers.map(function(t){return [t.min_qty,t.max_qty>=1e6?1e9:t.max_qty,t.unit_price]});MINQ=j.minimo||TIERS[0][0];renderTiers();calc()}}catch(e){}})();
 document.getElementById('wal').href='https://wa.me/'+WHATS;
 ['lnkEntrar','lnkEntrar2'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=login'});
 ['lnkCriar','lnkCriar2','lnkCriar3'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=registro'});
 function q(c,d){N[c]=Math.max(0,N[c]+d);calc()}
 function calc(){var n=N.azul+N.preta,u=n?price(n):0;qa.textContent=N.azul;qp.textContent=N.preta;sq.textContent=n;su.textContent=R(u);st.textContent=R(n*u);
-var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=nx?'Com mais '+(nx[0]-n)+', cada placa sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
+var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=n<MINQ?'Pedido mínimo: '+MINQ+' placas'+(n?' — faltam '+(MINQ-n)+'.':'.'):nx?'Com mais '+(nx[0]-n)+', cada placa sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
 calc();
 
 /* contadores — mostra o maior valor entre o número real (quando o backend responder) e o piso de marketing abaixo */

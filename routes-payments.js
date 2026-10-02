@@ -128,6 +128,8 @@ router.post('/checkout', requireReseller, async (req, res) => {
   }
   const qty = qty_azul + qty_preta;
   if (qty < 1) return res.status(400).json({ error: 'Escolha ao menos 1 placa.' });
+  const minimo = db.prepare('SELECT MIN(min_qty) AS m FROM price_tiers').get().m || 1;
+  if (qty < minimo) return res.status(400).json({ error: `O pedido mínimo é de ${minimo} placas (azuis, pretas ou as duas juntas). Você escolheu ${qty}.` });
   if (qty > 100000) return res.status(400).json({ error: 'Quantidade acima do permitido.' });
   if (!['pix', 'credit_card'].includes(method)) return res.status(400).json({ error: 'Forma de pagamento inválida.' });
   if (!payer || !payer.email || !payer.first_name) {

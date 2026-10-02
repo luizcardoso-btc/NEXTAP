@@ -25,4 +25,11 @@ router.get('/r/:code', (req, res) => {
   res.redirect(302, plate.destination_url);
 });
 
+// Tabela de preços para o site de vendas (assim o site nunca fica diferente do que é cobrado).
+router.get('/api/public/price-tiers', (req, res) => {
+  const tiers = db.prepare('SELECT min_qty, max_qty, unit_price FROM price_tiers ORDER BY min_qty').all();
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ tiers, minimo: tiers.length ? tiers[0].min_qty : 1 });
+});
+
 module.exports = router;

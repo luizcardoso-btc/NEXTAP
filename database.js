@@ -279,6 +279,12 @@ CREATE TABLE IF NOT EXISTS sales (
       origem TEXT, payment_id TEXT, order_id INTEGER, mp_status TEXT, resultado TEXT, detalhe TEXT
     );
   `),
+  // v7 — nova tabela de preços (pedido mínimo de 5 placas): 5–10 = R$ 21,90 · 11–49 = R$ 17,50 · 50–299 = R$ 16,50 · 300+ = R$ 15,90.
+  db => {
+    db.exec('DELETE FROM price_tiers');
+    const ins = db.prepare('INSERT INTO price_tiers (min_qty, max_qty, unit_price) VALUES (?, ?, ?)');
+    [[5, 10, 21.9], [11, 49, 17.5], [50, 299, 16.5], [300, 1000000, 15.9]].forEach(p => ins.run(p[0], p[1], p[2]));
+  },
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
@@ -304,10 +310,11 @@ if (versaoAtual < MIGRACOES.length) {
   }
 }
 
-// Tabela de preços oficial (mesma do site). Usada na primeira criação do banco.
+// Tabela de preços oficial (o site lê esta mesma tabela). Usada na primeira criação do banco.
+// O pedido mínimo é o começo da primeira faixa.
 const PRECOS = [
-  [1, 1, 21.9],
-  [2, 49, 17.5],
+  [5, 10, 21.9],
+  [11, 49, 17.5],
   [50, 299, 16.5],
   [300, 1000000, 15.9],
 ];

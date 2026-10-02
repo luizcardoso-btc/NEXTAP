@@ -10,8 +10,8 @@ Backend (Node/Express + SQLite) e as 3 páginas (site, painel do revendedor, pai
 | `/health` | Verificação de saúde (mostra `dados_persistentes: true` quando o Volume está ligado) |
 
 Todos os arquivos ficam na raiz do repositório (sem pastas). Variáveis de ambiente: veja `.env.example`.
-Imagens (também na raiz): `logo.png` (logo recortado), `favicon.png` e `placa.jpg` (foto da placa). Para trocar a foto
-da placa, suba outro arquivo com o mesmo nome `placa.jpg`.
+Imagens (também na raiz): `logo.png` (logo recortado), `favicon.png`, `placa.jpg` (foto da placa no topo do site) e
+`placas-nextap.jpg` (as 3 placas flutuando no bloco "A placa"). Para trocar uma foto, suba outro arquivo com o mesmo nome.
 
 ## Login do revendedor
 Tela em duas colunas, com "Manter conectado" (marcado = fica logado neste aparelho; desmarcado = sai ao fechar a aba)
@@ -68,3 +68,9 @@ o restante é preenchido sozinho (ViaCEP). O endereço já vem preenchido no che
 Variáveis: `SITE_HOST=www.nextapbrasil.com.br` e `PUBLIC_BACKEND_URL=https://www.nextapbrasil.com.br`.
 Com isso: quem entra pelo endereço sem www ou pelo `.up.railway.app` é redirecionado (301) ao principal; HSTS; CORS
 restrito ao domínio; robots.txt (painéis fora do Google); cabeçalhos de segurança. O webhook e o /health nunca são redirecionados.
+
+## Tabela de preços e pedido mínimo
+Tabela atual: **5 a 10 placas = R$ 21,90 · 11 a 49 = R$ 17,50 · 50 a 299 = R$ 16,50 · 300 a ∞ = R$ 15,90**.
+O pedido mínimo é onde começa a primeira faixa (5 placas) e é exigido no checkout. A tabela fica no banco: o site
+(`/api/public/price-tiers`), o painel do revendedor e a cobrança leem a mesma fonte. Para mudar preços, use
+Admin → Preços (vale na hora em todos os lugares).
