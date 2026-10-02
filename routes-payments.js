@@ -1,5 +1,5 @@
 const express = require('express');
-const { nanoid } = require('nanoid');
+const pedidos = require('./pedidos.js');
 const { MercadoPagoConfig, Payment, Preference } = require('mercadopago');
 const db = require('./database.js');
 const { requireReseller } = require('./auth-middleware.js');
@@ -217,7 +217,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
       },
     });
 
-    db.prepare('UPDATE orders SET mp_preference_id=? WHERE id=?').run(result.id, orderId);
+    db.prepare('UPDATE orders SET mp_preference_id=?, checkout_url=? WHERE id=?').run(result.id, result.init_point || null, orderId);
     return res.json({ order_id: orderId, checkout_url: result.init_point, total });
 
   } catch (err) {
@@ -230,69 +230,48 @@ router.post('/checkout', requireReseller, async (req, res) => {
   }
 });
 
-// O revendedor consulta o status do pedido (usado para o painel atualizar sozinho enquanto aguarda o Pix)
-router.get('/orders/:id/status', requireReseller, (req, res) => {
-  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
+// O revendedor consulta o status do pedido (o painel atualiza sozinho enquanto aguarda o Pix).
+// Se ainda está pendente, confere direto no Mercado Pago (no máximo a cada 15 segundos) — não depende do webhook.
+router.get('/orders/:id/status', requireReseller, async (req, res) => {
+  let order = db.prepare('SELECT * FROM orders WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
   if (!order) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (order.status === 'aguardando_pagamento') {
+    const ultima = order.mp_checked_at ? new Date(order.mp_checked_at.replace(' ', 'T') + 'Z').getTime() : 0;
+    if (Date.now() - ultima > 15000) {
+      try { await pedidos.conferirPedido(order.id, 'painel-revendedor'); } catch (e) { console.error('[PAGAMENTO] conferência falhou:', e.message); }
+      order = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
+    }
+  }
   res.json(order);
+});
+
+// Reabrir o pagamento de um pedido que ainda está aguardando (Pix ou link do cartão).
+router.get('/orders/:id/pagamento', requireReseller, (req, res) => {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (o.status !== 'aguardando_pagamento') return res.status(409).json({ error: 'Este pedido não está mais aguardando pagamento.', status: o.status });
+  res.json({ order_id: o.id, metodo: o.payment_method, total: o.total, pix_qr_code: o.pix_qr_code || null,
+             pix_qr_base64: o.pix_qr_base64 || null, checkout_url: o.checkout_url || null });
 });
 
 // Webhook do Mercado Pago: ele chama esta URL quando o status de um pagamento muda.
 // Precisa estar public (PUBLIC_BACKEND_URL) e cadastrada no seu app do Mercado Pago.
 router.post('/webhook', express.json(), async (req, res) => {
+  // O Mercado Pago manda dois formatos: novo (?type=payment&data.id=…) e antigo/IPN (?topic=payment&id=…).
+  const topic = req.query.type || req.query.topic || req.body?.type || req.body?.topic;
+  const paymentId = req.query['data.id'] || req.body?.data?.id || (topic === 'payment' ? (req.query.id || req.body?.id) : null);
+  if (topic !== 'payment' || !paymentId) return res.sendStatus(200); // outros avisos (ex.: merchant_order) não interessam
   try {
-    const topic = req.query.type || req.body?.type;
-    const paymentId = req.query['data.id'] || req.body?.data?.id;
-    if (topic !== 'payment' || !paymentId) return res.sendStatus(200);
-
-    const payment = new Payment(client);
-    const info = await payment.get({ id: paymentId });
-    const orderId = Number(info.external_reference);
-    if (!orderId) return res.sendStatus(200);
-
-    if (info.status === 'approved') {
-      // Só processa se o pedido ainda não foi pago. (Antes, um webhook repetido depois do
-      // pedido virar "enviado"/"entregue" voltava o status para "pago" e duplicava as placas.)
-      const markPaid = db.transaction(() => {
-        const r = db.prepare(
-          `UPDATE orders SET status='pago', paid_at=datetime('now'), mp_payment_id=?
-           WHERE id=? AND status IN ('aguardando_pagamento','cancelado')`
-        ).run(String(info.id), orderId);
-        if (r.changes) generatePlatesForOrder(orderId);
-      });
-      markPaid();
-    } else if (['rejected', 'cancelled'].includes(info.status)) {
-      db.prepare(`UPDATE orders SET status='cancelado' WHERE id=? AND status='aguardando_pagamento'`).run(orderId);
-    }
+    await pedidos.processarNotificacao(paymentId);
     res.sendStatus(200);
   } catch (err) {
     console.error('Erro no webhook do Mercado Pago:', err?.message || err);
-    res.sendStatus(200); // sempre 200, senão o Mercado Pago fica reenviando
+    pedidos.registrarEvento({ origem: 'webhook', payment_id: paymentId, resultado: 'erro', detalhe: String(err?.message || err).slice(0, 200) });
+    // Erro de verdade (rede, banco ocupado…): responde 500 para o Mercado Pago TENTAR DE NOVO mais tarde.
+    // (Antes respondia sempre 200 e a notificação se perdia — o pedido pago ficava "pendente".)
+    res.sendStatus(500);
   }
 });
-
-// Cria as placas no estoque do revendedor assim que o pedido é pago
-function generatePlatesForOrder(orderId) {
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
-  if (!order) return;
-  const insert = db.prepare(
-    `INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)`
-  );
-  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ?');
-  const gravaCodigo = db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?');
-  // Código de rastreio impresso na frente da placa: #00001, #00002… (pula números já usados)
-  const novoCodigo = id => {
-    let n = id, c;
-    do { c = '#' + String(n).padStart(5, '0'); n++; } while (existe.get(c));
-    return c;
-  };
-  const criar = cor => {
-    const r = insert.run(order.reseller_id, order.id, nanoid(10), cor, order.unit_price);
-    gravaCodigo.run(novoCodigo(Number(r.lastInsertRowid)), r.lastInsertRowid);
-  };
-  for (let i = 0; i < order.qty_azul; i++) criar('azul');
-  for (let i = 0; i < order.qty_preta; i++) criar('preta');
-}
 
 router.diagnose = diagnose;
 module.exports = router;

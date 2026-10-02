@@ -104,7 +104,9 @@ var LES=['Como ativar uma placa (NFC + QR Code dinâmico)','Como proteger sua ta
 
 function R(n){return (n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function E(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-function fd(d){return new Date(d).toLocaleDateString('pt-BR')}
+function U(s){if(s instanceof Date)return s;s=String(s||'');if(/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d)?$/.test(s))return new Date(s.replace(' ','T')+(s.length===16?':00':'')+'Z');return new Date(s)}
+function fd(d){return U(d).toLocaleDateString('pt-BR')}
+function fdh(d){return d?U(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}
 function pad(i){return String(i).padStart(4,'0')}
 function theme(){var r=document.documentElement,d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);r.dataset.theme=d?'light':'dark'}
 function lsLes(){try{return JSON.parse(localStorage.getItem('nx_les_'+(ME?ME.email:'x'))||'{}')}catch(e){return {}}}
@@ -187,7 +189,7 @@ function cl(){$('mo').style.display='none';$('mb').style.maxWidth='';if(pollTime
 $('mo').onclick=function(e){if(e.target===this)cl()};
 function head(t,s){$('hd').innerHTML='<h2>'+t+'</h2><span class="mut">'+s+'</span>'}
 function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias'],['month','Este mês'],['all','Tudo']].map(function(p){return '<button class="pill '+(per===p[0]?'on':'')+'" onclick="per=\''+p[0]+'\';draw()">'+p[1]+'</button>'}).join('')+'</div>'}
-function inP(x){var d=new Date(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
+function inP(x){var d=U(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function tot(a){return a.reduce(function(s,x){return s+(x.value!=null?x.value:x.total||0)},0)}
 function draw(){$('v').innerHTML=({dash:vDash,placas:vPlacas,placa:vPlaca,vendas:vVendas,comprar:vComprar,pedidos:vPedidos,conta:vConta,academy:vAcad})[cur]()}
 function stTag(s){var m={estoque:'Não configurada',ativa:'Configurada',aguardando_pagamento:'Aguardando pagamento',pago:'Pago',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado'};return '<span class="st '+(s==='aguardando_pagamento'?'w':s==='estoque'?'g':'')+'">'+(m[s]||s)+'</span>'}
@@ -195,10 +197,10 @@ function stTag(s){var m={estoque:'Não configurada',ativa:'Configurada',aguardan
 /* ---- dashboard ---- */
 function vDash(){head('Dashboard','Veja o desempenho das suas vendas.');
 var a=SALES.filter(inP),n=new Date();
-var moS=SALES.filter(function(x){var d=new Date(x.created_at);return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear()}),hj=SALES.filter(function(x){return new Date(x.created_at).toDateString()===n.toDateString()});
+var moS=SALES.filter(function(x){var d=U(x.created_at);return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear()}),hj=SALES.filter(function(x){return U(x.created_at).toDateString()===n.toDateString()});
 var cost=a.reduce(function(s,x){return s+(x.cost||0)},0),est=PLATES.filter(function(p){return p.status==='estoque'}).length,ativ=PLATES.length-est;
 var les=lsLes(),done=Object.keys(les).filter(function(k){return les[k]}).length,pc=Math.round(done/LES.length*100);
-var b=[],mx=1;for(var i=6;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);var v=tot(SALES.filter(function(x){return new Date(x.created_at).toDateString()===d.toDateString()}));b.push([d.toLocaleDateString('pt-BR',{weekday:'short'}),v]);mx=Math.max(mx,v)}
+var b=[],mx=1;for(var i=6;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);var v=tot(SALES.filter(function(x){return U(x.created_at).toDateString()===d.toDateString()}));b.push([d.toLocaleDateString('pt-BR',{weekday:'short'}),v]);mx=Math.max(mx,v)}
 return '<div class="card" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>🎓 NFC Academy</b><div class="mut" style="margin:4px 0 8px">Próxima aula: '+E(LES[Math.min(done,LES.length-1)])+'</div><div class="pg"><i style="width:'+pc+'%"></i></div></div><b>'+pc+'%</b><button class="btn p" onclick="nav(\'academy\')">Continuar</button></div>'+
 '<h3 style="margin:22px 0 0">Vendas</h3>'+pills()+
 '<div class="k"><div><small>Faturamento total</small><b>'+R(tot(a))+'</b></div><div><small>Faturamento no mês</small><b>'+R(tot(moS))+'</b></div><div><small>Faturamento hoje</small><b>'+R(tot(hj))+'</b></div><div><small>Ticket médio</small><b>'+R(a.length?tot(a)/a.length:0)+'</b></div><div><small>Lucro estimado</small><b>'+R(tot(a)-cost)+'</b></div><div><small>Placas não configuradas</small><b>'+est+'</b></div><div><small>Placas configuradas</small><b>'+ativ+'</b></div></div>'+
@@ -209,7 +211,7 @@ var PF='todas',PQ='',STATS={};
 function pc(p){return p.tracking_code||('#'+String(p.id).padStart(5,'0'))}
 function plLabel(id){var p=getPl(id);return p?pc(p):'#'+String(id).padStart(5,'0')}
 function plTag(p){return p.status==='ativa'?'<span class="st">Configurada</span>':'<span class="st g">Não configurada</span>'}
-function fuso(s){return s?new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null}
+function fuso(s){return s?U(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null}
 function toast(m){var t=$('tt');if(!t){t=document.createElement('div');t.id='tt';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#15803d;color:#fff;padding:12px 20px;border-radius:12px;font-weight:600;z-index:40;box-shadow:0 10px 30px #0004;transition:opacity .3s';document.body.appendChild(t)}t.textContent=m;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(function(){t.style.opacity=0},2600)}
 function plGrid(){
   var q=PQ.trim().toLowerCase();
@@ -373,8 +375,20 @@ pollTimer=setInterval(async function(){
 },4000)}
 
 /* ---- pedidos ---- */
-function vPedidos(){head('Meus pedidos','Acompanhe suas compras de placas.');
-return '<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Entrega</th><th>Status</th></tr>'+(ORDERS.length?ORDERS.map(function(o){return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td></tr>'}).join(''):'<tr><td colspan="8" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
+function passos(o){if(o.status==='cancelado')return '<span class="mut">Pedido cancelado</span>';var i=['aguardando_pagamento','pago','enviado','entregue'].indexOf(o.status),t=['Pagamento','Pago','Enviado','Entregue'];
+  return '<span style="white-space:nowrap">'+t.map(function(x,k){return '<small style="color:'+(k<=i?'var(--pr);font-weight:700':'var(--mut)')+'">'+(k<=i?'●':'○')+' '+x+'</small>'}).join(' › ')+'</span>'}
+function vPedidos(){head('Meus pedidos','Acompanhe o pagamento e a entrega das suas placas.');
+  var pend=ORDERS.filter(function(o){return o.status==='aguardando_pagamento'});
+  var av=pend.length?'<div class="card" style="border-color:#f59e0b;margin-top:14px"><b>'+pend.length+' pedido(s) aguardando pagamento.</b> <span class="mut">Assim que o pagamento for confirmado, suas placas aparecem em “Minhas placas” automaticamente.</span></div>':'';
+  return av+'<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Andamento</th><th>Entrega</th><th>Status</th><th></th></tr>'+(ORDERS.length?ORDERS.map(function(o){
+    var acao=o.status==='aguardando_pagamento'?'<button class="btn s p" onclick="reabrirPag('+o.id+')">'+(o.payment_method==='pix'?'Ver Pix / pagar':'Pagar agora')+'</button>':'';
+    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+(o.paid_at?'<br><small class="mut">Pago em '+fdh(o.paid_at)+'</small>':'')+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
+async function reabrirPag(id){
+  try{var r=await api('/payments/orders/'+id+'/pagamento');
+    if(r.metodo==='pix'&&(r.pix_qr_code||r.pix_qr_base64)){showPix({order_id:r.order_id,total:r.total,pix_qr_code:r.pix_qr_code,pix_qr_base64:r.pix_qr_base64})}
+    else if(r.checkout_url){window.open(r.checkout_url,'_blank','noopener')}
+    else alert('Não encontrei os dados de pagamento deste pedido. Faça um novo pedido ou fale com o suporte.')
+  }catch(e){alert(e.message);try{await loadOrders();draw()}catch(x){}}}
 
 /* ---- conta / academy ---- */
 function vConta(){head('Minha conta','Seus dados e o endereço usado nas entregas.');
@@ -422,6 +436,7 @@ function ls(i){var les=lsLes();les[i]=!les[i];svLes(les);draw()}
 var qs=new URLSearchParams(location.search),initialTab=qs.get('tab');
 RESET_TOKEN=qs.get('reset');
 at(RESET_TOKEN?'r':initialTab==='login'?'e':'c');
+var RET=qs.get('pedido');
 (function(){var t=RESET_TOKEN?null:readToken();
-if(t){TOKEN=t;boot().catch(function(){out()})}})();
+if(t){TOKEN=t;boot().then(function(){if(RET){nav('pedidos');api('/payments/orders/'+RET+'/status').then(function(o){return Promise.all([loadOrders(),loadPlates()]).then(function(){draw();toast(o.status==='pago'?'Pagamento aprovado! Suas placas já estão no estoque ✓':'Recebemos seu retorno. Assim que o pagamento for confirmado o pedido muda para Pago.')})}).catch(function(){});try{history.replaceState(null,'',location.pathname)}catch(e){}}}).catch(function(){out()})}})();
 </script></body></html>

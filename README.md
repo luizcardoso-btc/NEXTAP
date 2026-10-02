@@ -51,3 +51,20 @@ o restante é preenchido sozinho (ViaCEP). O endereço já vem preenchido no che
   uma cópia do estado atual — dá para desfazer.
 - **Reativar um revendedor:** cadastro manual que gera o link para a pessoa criar a senha.
 - Proteções extras: limite de tentativas de login, verificação de integridade ao ligar, gravação segura em disco.
+
+## Pagamentos e pedidos (admin → Pedidos / Visão geral / Financeiro)
+- **Situação do pedido:** Aguardando pagamento → Pago → Enviado → Entregue (ou Cancelado). Só pedidos pagos entram no
+  faturamento; os que aguardam aparecem em "A receber".
+- **Não depende só do webhook:** a cada 3 minutos o sistema confere os pedidos pendentes direto no Mercado Pago, e o
+  painel tem os botões **🔄 Conferir** (um pedido ou todos). O webhook agora entende o formato antigo (IPN) e responde 500
+  em caso de erro, para o Mercado Pago tentar de novo.
+- **Proteção contra pagamento errado:** só aceita se valor, data e (no Pix) o id do pagamento conferem com o pedido.
+- **Confirmar pagamento (manual):** para quando o dinheiro entrou por outro meio. Exige observação e fica registrado.
+- **Financeiro → Conferir com o Mercado Pago:** lista pagamentos aprovados de placas NexTap sem pedido no sistema.
+- **Admin → Dados e backups → Notificações de pagamento:** histórico do que foi recebido/conferido.
+- Revendedor: andamento do pedido, "Pago em", e botão **Ver Pix / pagar** para pedidos pendentes.
+
+## Domínio próprio e segurança
+Variáveis: `SITE_HOST=www.nextapbrasil.com.br` e `PUBLIC_BACKEND_URL=https://www.nextapbrasil.com.br`.
+Com isso: quem entra pelo endereço sem www ou pelo `.up.railway.app` é redirecionado (301) ao principal; HSTS; CORS
+restrito ao domínio; robots.txt (painéis fora do Google); cabeçalhos de segurança. O webhook e o /health nunca são redirecionados.

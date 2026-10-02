@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const db = require('./database.js');
 const senha = require('./senha.js');
+const pedidos = require('./pedidos.js');
 const { requireAdmin } = require('./auth-middleware.js');
 
 const router = express.Router();
@@ -17,7 +18,9 @@ router.get('/overview', (req, res) => {
   const pendentes = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='aguardando_pagamento'").get().n;
   const placas = db.prepare('SELECT COUNT(*) AS n FROM plates').get().n;
   const ativas = db.prepare("SELECT COUNT(*) AS n FROM plates WHERE status='ativa'").get().n;
-  res.json({ revendedores, faturamento, pendentes, placas, ativas, persistente: db.meta.persistente });
+  const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status='aguardando_pagamento'").get().s;
+  const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','enviado','entregue')").get().n;
+  res.json({ revendedores, faturamento, a_receber: aReceber, pendentes, pagos, placas, ativas, persistente: db.meta.persistente });
 });
 
 // Gera um link de redefinição de senha (vale 24h) para o fornecedor enviar ao revendedor, por exemplo no WhatsApp.
@@ -128,14 +131,56 @@ router.get('/orders', (req, res) => {
   res.json(rows);
 });
 
+// Andamento do pedido. Só segue a ordem certa: pago → enviado → entregue. Pedido não pago não pode ser enviado.
 router.put('/orders/:id/status', (req, res) => {
   const { status } = req.body || {};
-  if (!['enviado', 'entregue', 'cancelado'].includes(status)) {
-    return res.status(400).json({ error: 'Status inválido.' });
+  const permitido = { enviado: ['pago'], entregue: ['pago', 'enviado'], cancelado: ['aguardando_pagamento'] };
+  if (!permitido[status]) return res.status(400).json({ error: 'Status inválido.' });
+  const o = db.prepare('SELECT status FROM orders WHERE id = ?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!permitido[status].includes(o.status)) {
+    return res.status(409).json({ error: status === 'cancelado'
+      ? 'Só dá para cancelar pedidos que ainda aguardam pagamento. Para um pedido já pago, faça o estorno no Mercado Pago.'
+      : 'Este pedido ainda não foi pago. Confirme o pagamento antes de enviar.' });
   }
-  const info = db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, req.params.id);
-  if (!info.changes) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, req.params.id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: Number(req.params.id), resultado: 'status_' + status });
   res.json({ ok: true });
+});
+
+// Confere no Mercado Pago se o pagamento deste pedido já caiu (não depende do webhook).
+router.post('/orders/:id/conferir', async (req, res) => {
+  try { res.json(await pedidos.conferirPedido(Number(req.params.id), 'admin')); }
+  catch (e) { console.error('[PAGAMENTO] conferência manual falhou:', e.message); res.status(502).json({ error: 'Não consegui falar com o Mercado Pago agora. Tente de novo em instantes.' }); }
+});
+
+// Confere todos os pedidos que aguardam pagamento.
+router.post('/orders-conferir-todos', async (req, res) => {
+  try { res.json(await pedidos.conferirPendentes(60, 'admin')); }
+  catch (e) { res.status(502).json({ error: 'Não consegui falar com o Mercado Pago agora.' }); }
+});
+
+// Confirmação manual (ex.: o dinheiro entrou por outro meio). Exige uma observação para ficar registrado.
+router.post('/orders/:id/confirmar-pagamento', (req, res) => {
+  const nota = String((req.body || {}).observacao || '').trim().slice(0, 300);
+  if (nota.length < 3) return res.status(400).json({ error: 'Descreva como o pagamento foi recebido (ex.: "Pix direto na conta em 02/10").' });
+  const o = db.prepare('SELECT status FROM orders WHERE id = ?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!['aguardando_pagamento', 'cancelado'].includes(o.status)) return res.status(409).json({ error: 'Este pedido já está pago.' });
+  pedidos.marcarPago(Number(req.params.id), { manual: true, nota });
+  pedidos.registrarEvento({ origem: 'admin', order_id: Number(req.params.id), resultado: 'pago_manual', detalhe: nota });
+  res.json({ ok: true });
+});
+
+// Pagamentos aprovados no Mercado Pago que não têm pedido no sistema (para o financeiro bater com o que você recebeu).
+router.get('/mp-sem-pedido', async (req, res) => {
+  try { res.json(await pedidos.pagamentosSemPedido()); }
+  catch (e) { console.error('[PAGAMENTO] busca no MP falhou:', e.message); res.status(502).json({ error: 'Não consegui consultar o Mercado Pago agora.' }); }
+});
+
+// Últimas notificações/conferências de pagamento (para entender o que aconteceu com cada pedido).
+router.get('/payment-events', (req, res) => {
+  res.json(db.prepare('SELECT * FROM payment_events ORDER BY id DESC LIMIT 60').all());
 });
 
 router.get('/plates', (req, res) => {

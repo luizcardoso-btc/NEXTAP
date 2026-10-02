@@ -15,16 +15,41 @@ if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) console.warn('AVISO
 
 const app = express();
 app.set('trust proxy', 1); // Railway fica atrás de um proxy
+// Domínio principal (ex.: SITE_HOST=www.seudominio.com.br): quem entrar por outro endereço (sem www, ou o endereço
+// .up.railway.app) é levado ao principal. Só páginas (GET): o webhook do Mercado Pago e o /health nunca são redirecionados.
+app.use((req, res, next) => {
+  if (SITE_HOST && ['GET', 'HEAD'].includes(req.method) && req.hostname !== SITE_HOST
+      && req.path !== '/health' && !req.path.startsWith('/api/payments/webhook')) {
+    return res.redirect(301, 'https://' + SITE_HOST + req.originalUrl);
+  }
+  next();
+});
+
+// Cabeçalhos de segurança
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (req.secure && SITE_HOST && req.hostname === SITE_HOST) {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000'); // 180 dias: o navegador só abre o site em HTTPS
+  }
   if (/^\/(admin|revendedor|api)/.test(req.path)) res.setHeader('Cache-Control', 'no-store'); // nada de dados em cache
   next();
 });
 
+// Google: pode indexar o site de vendas; painéis e API ficam de fora.
+app.get('/robots.txt', (req, res) => res.type('text/plain').send(
+  'User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /revendedor\nDisallow: /api\n' +
+  (SITE_HOST ? `Sitemap: https://${SITE_HOST}/sitemap.xml\n` : '')));
+app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://${SITE_HOST || req.hostname}/</loc></url></urlset>`));
+
 // CORS: se FRONTEND_URL estiver definido, aceita só ele (mais seguro); vírgula separa vários domínios.
+const SITE_HOST = (process.env.SITE_HOST || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 const origins = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean);
+if (SITE_HOST) origins.push('https://' + SITE_HOST, 'https://' + SITE_HOST.replace(/^www\./, ''), 'https://www.' + SITE_HOST.replace(/^www\./, ''));
 app.use(cors(origins.length ? { origin: origins } : {}));
 app.use(express.json({ limit: '1mb' }));
 
@@ -58,6 +83,7 @@ const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`NexTap backend rodando na porta ${PORT}`);
   require('./routes-payments.js').diagnose().catch(() => {});
+  require('./pedidos.js').agendar(); // confere os pagamentos pendentes direto no Mercado Pago a cada poucos minutos
 });
 
 // No redeploy o Railway manda SIGTERM: fecha o banco direito para não deixar nada pela metade.

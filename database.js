@@ -266,6 +266,19 @@ CREATE TABLE IF NOT EXISTS sales (
   `),
   // v5 — país no endereço do revendedor (Minha conta). Só adiciona.
   db => db.exec(`ALTER TABLE resellers ADD COLUMN addr_country TEXT;`),
+  // v6 — situação do pagamento: conferência no Mercado Pago, confirmação manual e registro de notificações. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN paid_manually INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN payment_note TEXT;
+    ALTER TABLE orders ADD COLUMN mp_status TEXT;
+    ALTER TABLE orders ADD COLUMN mp_checked_at TEXT;
+    ALTER TABLE orders ADD COLUMN checkout_url TEXT;
+    CREATE TABLE IF NOT EXISTS payment_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      origem TEXT, payment_id TEXT, order_id INTEGER, mp_status TEXT, resultado TEXT, detalhe TEXT
+    );
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
