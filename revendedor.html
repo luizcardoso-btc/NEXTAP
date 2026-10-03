@@ -193,7 +193,7 @@ function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['3
 function inP(x){var d=U(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function tot(a){return a.reduce(function(s,x){return s+(x.value!=null?x.value:x.total||0)},0)}
 function draw(){$('v').innerHTML=({dash:vDash,placas:vPlacas,placa:vPlaca,vendas:vVendas,comprar:vComprar,pedidos:vPedidos,conta:vConta,academy:vAcad})[cur]()}
-function stTag(s){var m={estoque:'Não configurada',ativa:'Configurada',aguardando_pagamento:'Aguardando pagamento',pago:'Pago',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado'};return '<span class="st '+(s==='aguardando_pagamento'?'w':s==='estoque'?'g':'')+'">'+(m[s]||s)+'</span>'}
+function stTag(s){var m={estoque:'Não configurada',ativa:'Configurada',aguardando_pagamento:'Aguardando pagamento',pago:'Pedido recebido',em_producao:'Em produção',enviado:'Enviado',entregue:'Entregue',cancelado:'Cancelado'};return '<span class="st '+(s==='aguardando_pagamento'?'w':s==='estoque'?'g':'')+'">'+(m[s]||s)+'</span>'}
 
 /* ---- dashboard ---- */
 function vDash(){head('Dashboard','Veja o desempenho das suas vendas.');
@@ -290,7 +290,7 @@ async function dlS(id){if(!confirm('Excluir venda?'))return;try{await api('/rese
 /* ---- comprar (checkout real com Mercado Pago) ---- */
 function vComprar(){head('Comprar placas','Quanto mais você compra, menor o custo por placa.');var n=N.azul+N.preta,u=n?price(n):0;
 return '<div class="g2"><div class="card"><h3>Tabela de preços</h3>'+TIERS.map(function(t){var l=t.max_qty>=1000000?t.min_qty+' a ∞ placas':t.min_qty===t.max_qty?t.min_qty+' placa'+(t.min_qty>1?'s':''):t.min_qty+' a '+t.max_qty+' placas';return '<div class="tier '+(n>=t.min_qty&&n<=t.max_qty?'on':'')+'"><span>'+l+'</span><span>'+R(t.unit_price)+'</span></div>'}).join('')+'<small class="mut">Pedido mínimo: <b style="color:var(--tx)">'+minQ()+' placas</b> (azuis, pretas ou as duas juntas).<br>Acrílico 2 mm · 10×10 cm · NFC + QR Code dinâmico · fita dupla face</small></div>'+
-'<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n*u)+'</b></div><br>'+(n<minQ()?'<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam '+(minQ()-n)+' placa(s) para o pedido mínimo de '+minQ()+'.</p>':'')+'<button class="btn p" style="width:100%" '+(n<minQ()?'disabled':'')+' onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.</small></div></div>'}
+'<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n*u)+'</b></div><br>'+(n<minQ()?'<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam '+(minQ()-n)+' placa(s) para o pedido mínimo de '+minQ()+'.</p>':'')+'<button class="btn p" style="width:100%" '+(n<minQ()?'disabled':'')+' onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.<br><b style="color:var(--tx)">Prazo:</b> produção em até '+prazoProd()+' dias úteis após a confirmação do pagamento, mais o prazo dos Correios. Você acompanha tudo em “Meus pedidos”.</small></div></div>'}
 function q(c,d){N[c]=Math.max(0,N[c]+d);draw()}
 var LASTFORM=null,cepLast='';
 function fl(id,label,val,extra){return '<label>'+label+'<input id="'+id+'" value="'+E(val||'')+'" '+(extra||'')+'></label>'}
@@ -376,14 +376,28 @@ pollTimer=setInterval(async function(){
 },4000)}
 
 /* ---- pedidos ---- */
-function passos(o){if(o.status==='cancelado')return '<span class="mut">Pedido cancelado</span>';var i=['aguardando_pagamento','pago','enviado','entregue'].indexOf(o.status),t=['Pagamento','Pago','Enviado','Entregue'];
-  return '<span style="white-space:nowrap">'+t.map(function(x,k){return '<small style="color:'+(k<=i?'var(--pr);font-weight:700':'var(--mut)')+'">'+(k<=i?'●':'○')+' '+x+'</small>'}).join(' › ')+'</span>'}
+function prazoProd(){return (ORDERS[0]&&ORDERS[0].prazo_producao_dias)||5}
+function dm(s){if(!s)return '';var p=String(s).split('-');return p[2]+'/'+p[1]}
+function cpRast(c){var ok=function(){toast('Código copiado ✓')};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(c).then(ok,function(){});else ok()}
+function passos(o){
+  if(o.status==='cancelado')return '<span class="mut">Pedido cancelado</span>';
+  var idx={aguardando_pagamento:0,pago:1,em_producao:2,enviado:3,entregue:4}[o.status]||0;
+  var nomes=['Pagamento','Pedido recebido','Produção','Enviado','Entregue'],datas=[null,o.paid_at,o.producao_at,o.enviado_at,o.entregue_at];
+  return '<div style="display:grid;gap:3px;min-width:190px">'+nomes.map(function(n,k){
+    var feito=k<idx||idx===4,atual=k===idx&&idx<4,cor=feito?'var(--pr)':atual?(k===0?'#b45309':'var(--tx)'):'var(--mut)';
+    var info='';
+    if(feito&&datas[k])info=' <span class="mut">· '+fdh(datas[k])+'</span>';
+    if(k===0&&atual)info=' <span class="mut">· aguardando</span>';
+    if(k===1&&atual)info=' <span class="mut">· produção começa em breve ('+(o.prazo_producao_dias||5)+' dias úteis)</span>';
+    if(k===2&&atual&&o.prazo_envio)info=' <span class="mut">· previsão de envio até '+dm(o.prazo_envio)+'</span>';
+    if(k===3&&(atual||feito)&&o.tracking_code)info+='<div style="margin:2px 0 4px 16px"><b style="letter-spacing:.4px">'+E(o.tracking_code)+'</b> <a style="color:var(--pr);font-weight:700" target="_blank" rel="noopener" href="'+E(o.rastreio_url)+'">Rastrear nos Correios</a> <a style="cursor:pointer;color:var(--mut)" onclick="cpRast(\''+E(o.tracking_code)+'\')">copiar</a></div>';
+    return '<small style="color:'+cor+';font-weight:'+(atual?'700':'500')+'">'+(feito?'✔':atual?'●':'○')+' '+n+info+'</small>'}).join('')+'</div>'}
 function vPedidos(){head('Meus pedidos','Acompanhe o pagamento e a entrega das suas placas.');
   var pend=ORDERS.filter(function(o){return o.status==='aguardando_pagamento'});
   var av=pend.length?'<div class="card" style="border-color:#f59e0b;margin-top:14px"><b>'+pend.length+' pedido(s) aguardando pagamento.</b> <span class="mut">Assim que o pagamento for confirmado, suas placas aparecem em “Minhas placas” automaticamente.</span></div>':'';
-  return av+'<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Andamento</th><th>Entrega</th><th>Status</th><th></th></tr>'+(ORDERS.length?ORDERS.map(function(o){
+  return av+'<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Andamento do pedido</th><th>Entrega</th><th>Status</th><th></th></tr>'+(ORDERS.length?ORDERS.map(function(o){
     var acao=o.status==='aguardando_pagamento'?'<button class="btn s p" onclick="reabrirPag('+o.id+')">'+(o.payment_method==='pix'?'Ver Pix / pagar':'Pagar agora')+'</button>':'';
-    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+(o.paid_at?'<br><small class="mut">Pago em '+fdh(o.paid_at)+'</small>':'')+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
+    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
 async function reabrirPag(id){
   try{var r=await api('/payments/orders/'+id+'/pagamento');
     if(r.metodo==='pix'&&(r.pix_qr_code||r.pix_qr_base64)){showPix({order_id:r.order_id,total:r.total,pix_qr_code:r.pix_qr_code,pix_qr_base64:r.pix_qr_base64})}

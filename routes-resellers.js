@@ -1,6 +1,7 @@
 const express = require('express');
 const { nanoid } = require('nanoid');
 const db = require('./database.js');
+const pedidos = require('./pedidos.js');
 const { requireReseller } = require('./auth-middleware.js');
 
 const router = express.Router();
@@ -154,7 +155,7 @@ router.delete('/sales/:id', (req, res) => {
 // Pedidos do revendedor (histórico)
 router.get('/orders', (req, res) => {
   const orders = db.prepare('SELECT * FROM orders WHERE reseller_id = ? ORDER BY id DESC').all(req.resellerId);
-  res.json(orders);
+  res.json(orders.map(pedidos.decorar));
 });
 
 module.exports = router;

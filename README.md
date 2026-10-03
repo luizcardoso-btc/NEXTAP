@@ -74,3 +74,13 @@ Tabela atual: **5 a 10 placas = R$ 21,90 · 11 a 49 = R$ 17,50 · 50 a 299 = R$ 
 O pedido mínimo é onde começa a primeira faixa (5 placas) e é exigido no checkout. A tabela fica no banco: o site
 (`/api/public/price-tiers`), o painel do revendedor e a cobrança leem a mesma fonte. Para mudar preços, use
 Admin → Preços (vale na hora em todos os lugares).
+
+## Andamento do pedido (admin → Pedidos)
+Depois de pago: **Pedido recebido** → **Em produção** (prazo de 5 dias úteis; mude com a variável `PRAZO_PRODUCAO_DIAS`)
+→ **Enviado** (com o código de rastreio dos Correios) → **Entregue**.
+- Código dos Correios no formato `AA123456789BR` (validado; um código não pode repetir em outro pedido). O revendedor vê o
+  código e o link "Rastrear nos Correios" (`rastreamento.correios.com.br/app/index.php?objetos=CÓDIGO`) no painel dele.
+- Ao enviar, o admin pode avisar o cliente pelo WhatsApp com a mensagem pronta (código + link).
+- **Fila** na Visão geral: recebidos, em produção, **atrasados** (passou do prazo) e enviados. Produção em lote por seleção.
+- "↩" desfaz a última etapa. Entrega em mãos: "Marcar como entregue" sem código.
+- Prazo em dias úteis (sábado e domingo não contam; feriados não são considerados), no horário de Brasília.

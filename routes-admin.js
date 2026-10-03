@@ -14,12 +14,12 @@ router.use(requireAdmin);
 
 router.get('/overview', (req, res) => {
   const revendedores = db.prepare('SELECT COUNT(*) AS n FROM resellers').get().n;
-  const faturamento = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status IN ('pago','enviado','entregue')").get().s;
+  const faturamento = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().s;
   const pendentes = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='aguardando_pagamento'").get().n;
   const placas = db.prepare('SELECT COUNT(*) AS n FROM plates').get().n;
   const ativas = db.prepare("SELECT COUNT(*) AS n FROM plates WHERE status='ativa'").get().n;
   const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status='aguardando_pagamento'").get().s;
-  const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','enviado','entregue')").get().n;
+  const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().n;
   res.json({ revendedores, faturamento, a_receber: aReceber, pendentes, pagos, placas, ativas, persistente: db.meta.persistente });
 });
 
@@ -114,7 +114,7 @@ router.get('/resellers', (req, res) => {
   const rows = db.prepare(`
     SELECT r.id, r.name, r.email, r.whatsapp, r.created_at,
       (SELECT COUNT(*) FROM orders o WHERE o.reseller_id=r.id) AS pedidos,
-      (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.status IN ('pago','enviado','entregue')) AS gasto,
+      (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.status IN ('pago','em_producao','enviado','entregue')) AS gasto,
       (SELECT COUNT(*) FROM plates p WHERE p.reseller_id=r.id) AS placas,
       (SELECT COUNT(*) FROM sales s WHERE s.reseller_id=r.id) AS vendas
     FROM resellers r ORDER BY r.id DESC
@@ -128,24 +128,106 @@ router.get('/orders', (req, res) => {
     FROM orders o JOIN resellers r ON r.id = o.reseller_id
     ORDER BY o.id DESC
   `).all();
-  res.json(rows);
+  res.json(rows.map(pedidos.decorar));
 });
 
-// Andamento do pedido. Só segue a ordem certa: pago → enviado → entregue. Pedido não pago não pode ser enviado.
+// Cancelar (só pedido que ainda não foi pago). As demais etapas têm rotas próprias, abaixo.
 router.put('/orders/:id/status', (req, res) => {
   const { status } = req.body || {};
-  const permitido = { enviado: ['pago'], entregue: ['pago', 'enviado'], cancelado: ['aguardando_pagamento'] };
-  if (!permitido[status]) return res.status(400).json({ error: 'Status inválido.' });
+  if (status !== 'cancelado') return res.status(400).json({ error: 'Use os botões de produção, envio e entrega.' });
   const o = db.prepare('SELECT status FROM orders WHERE id = ?').get(req.params.id);
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
-  if (!permitido[status].includes(o.status)) {
-    return res.status(409).json({ error: status === 'cancelado'
-      ? 'Só dá para cancelar pedidos que ainda aguardam pagamento. Para um pedido já pago, faça o estorno no Mercado Pago.'
-      : 'Este pedido ainda não foi pago. Confirme o pagamento antes de enviar.' });
+  if (o.status !== 'aguardando_pagamento') {
+    return res.status(409).json({ error: 'Só dá para cancelar pedidos que ainda aguardam pagamento. Para um pedido já pago, faça o estorno no Mercado Pago.' });
   }
-  db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, req.params.id);
-  pedidos.registrarEvento({ origem: 'admin', order_id: Number(req.params.id), resultado: 'status_' + status });
+  db.prepare("UPDATE orders SET status='cancelado' WHERE id=?").run(req.params.id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: Number(req.params.id), resultado: 'status_cancelado' });
   res.json({ ok: true });
+});
+
+// ---- Pedido recebido (pago) → Produção → Enviado (com código dos Correios) → Entregue ----
+const pegar = id => db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+const resposta = id => ({ ok: true, order: pedidos.decorar(pegar(id)) });
+
+function iniciarProducao(id) {
+  const r = db.prepare("UPDATE orders SET status='em_producao', producao_at=datetime('now') WHERE id=? AND status='pago'").run(id);
+  if (r.changes) pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'status_em_producao' });
+  return r.changes > 0;
+}
+
+router.post('/orders/:id/producao', (req, res) => {
+  const id = Number(req.params.id);
+  if (!pegar(id)) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!iniciarProducao(id)) return res.status(409).json({ error: 'A produção só pode começar em pedidos pagos que ainda não entraram em produção.' });
+  res.json(resposta(id));
+});
+
+// Vários de uma vez (produzir em lote).
+router.post('/orders-producao-lote', (req, res) => {
+  const ids = Array.isArray((req.body || {}).ids) ? req.body.ids.map(Number).filter(Number.isInteger).slice(0, 200) : [];
+  if (!ids.length) return res.status(400).json({ error: 'Selecione ao menos um pedido.' });
+  const iniciados = db.transaction(() => ids.filter(iniciarProducao).length)();
+  res.json({ iniciados, ignorados: ids.length - iniciados });
+});
+
+// Marcar como enviado, com o código de rastreio dos Correios.
+router.post('/orders/:id/enviar', (req, res) => {
+  const id = Number(req.params.id);
+  const o = pegar(id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!['pago', 'em_producao'].includes(o.status)) {
+    return res.status(409).json({ error: o.status === 'aguardando_pagamento' ? 'Este pedido ainda não foi pago. Confirme o pagamento antes de enviar.' : 'Este pedido não está na fila de envio.' });
+  }
+  const r = pedidos.lerRastreio(req.body);
+  if (r.erro) return res.status(400).json({ error: r.erro });
+  const outro = db.prepare('SELECT id FROM orders WHERE tracking_code = ? AND id <> ?').get(r.codigo, id);
+  if (outro) return res.status(409).json({ error: `Este código de rastreio já foi usado no pedido #${String(outro.id).padStart(5, '0')}.` });
+  db.prepare(`UPDATE orders SET status='enviado', enviado_at=datetime('now'), producao_at=COALESCE(producao_at, datetime('now')),
+    tracking_code=?, shipping_service=? WHERE id=?`).run(r.codigo, r.servico || null, id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'status_enviado', detalhe: r.codigo });
+  res.json(resposta(id));
+});
+
+// Corrigir o código/serviço de um pedido que já foi enviado.
+router.put('/orders/:id/rastreio', (req, res) => {
+  const id = Number(req.params.id);
+  const o = pegar(id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!['enviado', 'entregue'].includes(o.status)) return res.status(409).json({ error: 'Só dá para editar o rastreio de pedidos enviados.' });
+  const r = pedidos.lerRastreio(req.body);
+  if (r.erro) return res.status(400).json({ error: r.erro });
+  const outro = db.prepare('SELECT id FROM orders WHERE tracking_code = ? AND id <> ?').get(r.codigo, id);
+  if (outro) return res.status(409).json({ error: `Este código de rastreio já foi usado no pedido #${String(outro.id).padStart(5, '0')}.` });
+  db.prepare('UPDATE orders SET tracking_code=?, shipping_service=? WHERE id=?').run(r.codigo, r.servico || null, id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'rastreio_alterado', detalhe: r.codigo });
+  res.json(resposta(id));
+});
+
+// Entregue. (Também vale para entrega em mãos, sem código de rastreio.)
+router.post('/orders/:id/entregar', (req, res) => {
+  const id = Number(req.params.id);
+  const o = pegar(id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!['pago', 'em_producao', 'enviado'].includes(o.status)) return res.status(409).json({ error: 'Este pedido não pode ser marcado como entregue agora.' });
+  db.prepare("UPDATE orders SET status='entregue', entregue_at=datetime('now') WHERE id=?").run(id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'status_entregue' });
+  res.json(resposta(id));
+});
+
+// Desfaz a última etapa (para corrigir um clique errado).
+router.post('/orders/:id/voltar', (req, res) => {
+  const id = Number(req.params.id);
+  const o = pegar(id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  const sql = {
+    em_producao: "UPDATE orders SET status='pago', producao_at=NULL WHERE id=?",
+    enviado: "UPDATE orders SET status='em_producao', enviado_at=NULL, tracking_code=NULL, shipping_service=NULL WHERE id=?",
+    entregue: "UPDATE orders SET status='enviado', entregue_at=NULL WHERE id=?",
+  }[o.status];
+  if (!sql) return res.status(409).json({ error: 'Não há etapa para desfazer neste pedido.' });
+  db.prepare(sql).run(id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'etapa_desfeita', detalhe: o.status });
+  res.json(resposta(id));
 });
 
 // Confere no Mercado Pago se o pagamento deste pedido já caiu (não depende do webhook).

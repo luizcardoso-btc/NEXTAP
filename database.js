@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS orders (
   qty_preta INTEGER NOT NULL DEFAULT 0,
   unit_price REAL NOT NULL,
   total REAL NOT NULL,
-  status TEXT NOT NULL DEFAULT 'aguardando_pagamento', -- aguardando_pagamento | pago | enviado | entregue | cancelado
+  status TEXT NOT NULL DEFAULT 'aguardando_pagamento', -- aguardando_pagamento | pago (= pedido recebido) | em_producao | enviado | entregue | cancelado
   payment_method TEXT,          -- pix | credit_card
   mp_payment_id TEXT,           -- id do pagamento no Mercado Pago (Pix)
   mp_preference_id TEXT,        -- id da preferência no Mercado Pago (cartão / Checkout Pro)
@@ -285,6 +285,15 @@ CREATE TABLE IF NOT EXISTS sales (
     const ins = db.prepare('INSERT INTO price_tiers (min_qty, max_qty, unit_price) VALUES (?, ?, ?)');
     [[5, 10, 21.9], [11, 49, 17.5], [50, 299, 16.5], [300, 1000000, 15.9]].forEach(p => ins.run(p[0], p[1], p[2]));
   },
+  // v8 — andamento do pedido depois de pago: produção, envio com código de rastreio dos Correios e entrega. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN producao_at TEXT;
+    ALTER TABLE orders ADD COLUMN enviado_at TEXT;
+    ALTER TABLE orders ADD COLUMN entregue_at TEXT;
+    ALTER TABLE orders ADD COLUMN tracking_code TEXT;
+    ALTER TABLE orders ADD COLUMN shipping_service TEXT;
+    CREATE INDEX IF NOT EXISTS idx_orders_tracking ON orders(tracking_code);
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

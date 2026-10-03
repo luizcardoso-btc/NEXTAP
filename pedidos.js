@@ -163,4 +163,46 @@ async function pagamentosSemPedido(dias = 90) {
   return { itens };
 }
 
-module.exports = { pagamentosSemPedido, marcarPago, gerarPlacas, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
+
+// ---------- andamento do pedido: produção → envio (Correios) → entrega ----------
+const PRAZO_PRODUCAO_DIAS = Math.max(1, Number(process.env.PRAZO_PRODUCAO_DIAS) || 5); // em dias úteis
+
+const hojeBrasil = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bahia' }); // AAAA-MM-DD
+
+// Soma dias úteis (pula sábado e domingo) a partir do dia, no horário de Brasília. Feriados não são considerados.
+function adicionarDiasUteis(iso, dias) {
+  const base = new Date(String(iso).replace(' ', 'T') + 'Z');
+  const [a, m, d] = base.toLocaleDateString('en-CA', { timeZone: 'America/Bahia' }).split('-').map(Number);
+  const dt = new Date(Date.UTC(a, m - 1, d, 12));
+  let somados = 0;
+  while (somados < dias) {
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    const w = dt.getUTCDay();
+    if (w !== 0 && w !== 6) somados++;
+  }
+  return dt.toISOString().slice(0, 10);
+}
+
+const CODIGO_CORREIOS = /^[A-Z]{2}\d{9}[A-Z]{2}$/;
+function lerRastreio(b) {
+  const codigo = String((b || {}).codigo || '').replace(/\s/g, '').toUpperCase();
+  if (!CODIGO_CORREIOS.test(codigo)) {
+    return { erro: 'Código de rastreio inválido. Os Correios usam 2 letras + 9 números + 2 letras, por exemplo AA123456789BR.' };
+  }
+  const servico = String((b || {}).servico || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  return { codigo, servico };
+}
+const linkRastreio = codigo => `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(codigo)}`;
+
+// Acrescenta ao pedido o que a tela precisa: previsão de envio, atraso e o link de rastreio.
+function decorar(o) {
+  const x = { ...o, prazo_producao_dias: PRAZO_PRODUCAO_DIAS };
+  if (o.status === 'em_producao' && o.producao_at) {
+    x.prazo_envio = adicionarDiasUteis(o.producao_at, PRAZO_PRODUCAO_DIAS);
+    x.atrasado = hojeBrasil() > x.prazo_envio;
+  }
+  if (o.tracking_code) x.rastreio_url = linkRastreio(o.tracking_code);
+  return x;
+}
+
+module.exports = { decorar, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
