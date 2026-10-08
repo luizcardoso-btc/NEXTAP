@@ -29,7 +29,7 @@ router.get('/r/:code', (req, res) => {
 router.get('/api/public/price-tiers', (req, res) => {
   const tiers = db.prepare('SELECT min_qty, max_qty, unit_price FROM price_tiers ORDER BY min_qty').all();
   res.set('Cache-Control', 'public, max-age=60');
-  res.json({ tiers, minimo: tiers.length ? tiers[0].min_qty : 1 });
+  res.json({ tiers, minimo: tiers.length ? tiers[0].min_qty : 1, frete: db.freteFixo() });
 });
 
 module.exports = router;

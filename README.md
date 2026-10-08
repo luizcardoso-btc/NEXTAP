@@ -70,7 +70,7 @@ Com isso: quem entra pelo endereço sem www ou pelo `.up.railway.app` é redirec
 restrito ao domínio; robots.txt (painéis fora do Google); cabeçalhos de segurança. O webhook e o /health nunca são redirecionados.
 
 ## Tabela de preços e pedido mínimo
-Tabela atual: **5 a 10 placas = R$ 21,90 · 11 a 49 = R$ 17,50 · 50 a 299 = R$ 16,50 · 300 a ∞ = R$ 15,90**.
+Tabela atual: **5 a 10 placas = R$ 21,90 · 11 a 49 = R$ 18,90 · 50 a 99 = R$ 17,90 · 100 a 299 = R$ 16,90 · 300 a ∞ = R$ 15,90**.
 O pedido mínimo é onde começa a primeira faixa (5 placas) e é exigido no checkout. A tabela fica no banco: o site
 (`/api/public/price-tiers`), o painel do revendedor e a cobrança leem a mesma fonte. Para mudar preços, use
 Admin → Preços (vale na hora em todos os lugares).
@@ -84,3 +84,24 @@ Depois de pago: **Pedido recebido** → **Em produção** (prazo de 5 dias útei
 - **Fila** na Visão geral: recebidos, em produção, **atrasados** (passou do prazo) e enviados. Produção em lote por seleção.
 - "↩" desfaz a última etapa. Entrega em mãos: "Marcar como entregue" sem código.
 - Prazo em dias úteis (sábado e domingo não contam; feriados não são considerados), no horário de Brasília.
+
+## Frete fixo por pedido
+Valor fixo somado ao total de **cada pedido** (não por placa), para qualquer CEP do Brasil. Padrão: **R$ 20,00**; muda em
+Admin → Preços → "Frete fixo por pedido" (vale na hora para novos pedidos; use R$ 0,00 para frete grátis).
+- Aparece no site (abaixo da tabela e no simulador), na tela "Comprar placas", no checkout (junto ao CEP) e no Pix.
+- É cobrado junto, no Mercado Pago: Pix com o valor total; cartão com 2 itens (placas + "Frete (envio pelos Correios)").
+- Cada pedido guarda o frete cobrado (`shipping_fee`). Financeiro: "Receita só das placas" e "Frete cobrado" separados.
+
+## Fornecedores e estoque (admin → Gestão → 🏭 Fornecedores)
+Registre cada **compra** (fornecedor, quantidade, preço por placa, frete da compra) e o sistema controla o estoque:
+**em mãos** = entradas − ajustes − placas já enviadas · **comprometidas** = pedidos pagos ainda não enviados ·
+**disponível** = em mãos − comprometidas. "Definir estoque atual" faz a contagem; "Ajuste manual" lança perdas/brindes.
+Mostra custo médio ponderado e investimento total. Aviso quando o disponível fica abaixo do mínimo.
+
+## Financeiro → Lucro estimado (admin → Gestão → 💰 Financeiro)
+Abas: **Resumo · Lucro estimado · Despesas · Custos e taxas**. O lucro final desconta: custo das placas (padrão R$ 13,50),
+ICMS (padrão 1% por pedido, com ou sem frete na base), taxas do Mercado Pago (reais, buscadas na API; ou estimadas:
+Pix 0,99% / cartão 4,98%), custo do envio (real, informado ao marcar "enviado"; ou médio) e despesas operacionais
+(únicas ou mensais, rateadas por dia). Mostra lucro por faixa de preço, pedidos no prejuízo e "alertas do contador".
+**Analista com IA** (opcional): defina `ANTHROPIC_API_KEY` (e, se quiser, `ANALISTA_MODELO`) no Railway. Só números
+agregados vão para a IA — nenhum dado de cliente. Estimativa de gestão; tributos confirme com seu contador.

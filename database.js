@@ -294,6 +294,46 @@ CREATE TABLE IF NOT EXISTS sales (
     ALTER TABLE orders ADD COLUMN shipping_service TEXT;
     CREATE INDEX IF NOT EXISTS idx_orders_tracking ON orders(tracking_code);
   `),
+  // vFRETE — frete fixo por pedido (valor editável no admin) e o frete cobrado em cada pedido. Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('frete_fixo', '20.00');
+    ALTER TABLE orders ADD COLUMN shipping_fee REAL NOT NULL DEFAULT 0;
+  `),
+  // v10 — nova tabela de preços: 5–10 R$21,90 · 11–49 R$18,90 · 50–99 R$17,90 · 100–299 R$16,90 · 300+ R$15,90.
+  db => {
+    db.exec('DELETE FROM price_tiers');
+    const ins = db.prepare('INSERT INTO price_tiers (min_qty, max_qty, unit_price) VALUES (?, ?, ?)');
+    [[5, 10, 21.9], [11, 49, 18.9], [50, 99, 17.9], [100, 299, 16.9], [300, 1000000, 15.9]].forEach(p => ins.run(p[0], p[1], p[2]));
+  },
+  // v11 — fornecedores, estoque, despesas, custos e taxas para o financeiro (lucro estimado). Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS fornecedores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, contato TEXT, observacao TEXT,
+      ativo INTEGER NOT NULL DEFAULT 1, criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS estoque_mov (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, fornecedor_id INTEGER, data TEXT NOT NULL,
+      quantidade INTEGER NOT NULL, custo_unit REAL, custo_extra REAL NOT NULL DEFAULT 0, observacao TEXT,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_estoque_data ON estoque_mov(data);
+    CREATE TABLE IF NOT EXISTS despesas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL, descricao TEXT NOT NULL, categoria TEXT,
+      valor REAL NOT NULL, mensal INTEGER NOT NULL DEFAULT 0, criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    ALTER TABLE orders ADD COLUMN custo_frete_real REAL;
+    ALTER TABLE orders ADD COLUMN mp_fee REAL;
+    ALTER TABLE orders ADD COLUMN mp_net REAL;
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('custo_placa', '13.50');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('icms_pct', '1.00');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('icms_base_frete', '1');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('taxa_pix_pct', '0.99');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('taxa_cartao_pct', '4.98');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('custo_envio_padrao', '0.00');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('estoque_minimo', '50');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('custo_usar_medio', '0');
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
@@ -323,8 +363,9 @@ if (versaoAtual < MIGRACOES.length) {
 // O pedido mínimo é o começo da primeira faixa.
 const PRECOS = [
   [5, 10, 21.9],
-  [11, 49, 17.5],
-  [50, 299, 16.5],
+  [11, 49, 18.9],
+  [50, 99, 17.9],
+  [100, 299, 16.9],
   [300, 1000000, 15.9],
 ];
 // Tabela antiga que era criada por padrão nas primeiras versões.
@@ -365,6 +406,19 @@ snapshotInicio();
 backupDiario();
 setInterval(backupDiario, 6 * 60 * 60 * 1000).unref();
 
+// Frete fixo por pedido (R$). Lido a cada pedido, então mudar no admin vale na hora.
+db.freteFixo = () => {
+  const r = db.prepare("SELECT valor FROM settings WHERE chave='frete_fixo'").get();
+  const v = r ? Number(r.valor) : 0;
+  return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 0;
+};
+// Configurações numéricas (custos, taxas…) guardadas na tabela settings.
+db.cfg = (chave, padrao = 0) => {
+  const r = db.prepare('SELECT valor FROM settings WHERE chave = ?').get(chave);
+  const v = r ? Number(r.valor) : NaN;
+  return Number.isFinite(v) ? v : padrao;
+};
+db.setCfg = (chave, valor) => db.prepare('INSERT INTO settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor').run(chave, String(valor));
 db.meta = { arquivo: dbFile, persistente, backupDir };
 db.copiaTemporaria = copiaTemporaria;
 db.listarBackups = listarBackups;

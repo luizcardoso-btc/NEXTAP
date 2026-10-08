@@ -62,6 +62,15 @@ function divergencia(order, pay) {
 }
 
 // Aplica UM pagamento ao pedido. Devolve: pago | ja_pago | pendente | recusado | divergente
+// Taxa real cobrada pelo Mercado Pago e valor líquido recebido (vêm no próprio pagamento).
+function guardarTaxas(orderId, pay) {
+  const taxas = Array.isArray(pay.fee_details) ? pay.fee_details.reduce((s, f) => s + (Number(f.amount) || 0), 0) : null;
+  const liquido = pay.transaction_details && Number.isFinite(Number(pay.transaction_details.net_received_amount)) ? Number(pay.transaction_details.net_received_amount) : null;
+  if (taxas === null && liquido === null) return false;
+  db.prepare('UPDATE orders SET mp_fee = COALESCE(?, mp_fee), mp_net = COALESCE(?, mp_net) WHERE id = ?').run(taxas, liquido, orderId);
+  return true;
+}
+
 function aplicar(order, pay, origem) {
   db.prepare(`UPDATE orders SET mp_status=?, mp_checked_at=datetime('now') WHERE id=?`).run(pay.status || null, order.id);
   const motivo = divergencia(order, pay);
@@ -71,6 +80,7 @@ function aplicar(order, pay, origem) {
   }
   if (pay.status === 'approved') {
     const mudou = marcarPago(order.id, { paymentId: pay.id });
+    guardarTaxas(order.id, pay);
     registrarEvento({ origem, payment_id: pay.id, order_id: order.id, mp_status: pay.status, resultado: mudou ? 'pedido_pago' : 'ja_estava_pago' });
     return mudou ? 'pago' : 'ja_pago';
   }
@@ -205,4 +215,17 @@ function decorar(o) {
   return x;
 }
 
-module.exports = { decorar, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
+// Busca no Mercado Pago a taxa real dos pedidos já pagos que ainda não têm (até 80 por vez).
+async function atualizarTaxas(limite = 80) {
+  const lista = db.prepare(`SELECT id, mp_payment_id FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')
+    AND mp_payment_id IS NOT NULL AND mp_fee IS NULL ORDER BY id DESC LIMIT ?`).all(limite);
+  const r = { verificados: 0, atualizados: 0, erros: 0, restantes: 0 };
+  for (const o of lista) {
+    r.verificados++;
+    try { if (guardarTaxas(o.id, await buscarPagamento(o.mp_payment_id))) r.atualizados++; } catch (e) { r.erros++; }
+  }
+  r.restantes = db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','em_producao','enviado','entregue') AND mp_payment_id IS NOT NULL AND mp_fee IS NULL`).get().n;
+  return r;
+}
+
+module.exports = { atualizarTaxas, decorar, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };

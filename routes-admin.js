@@ -20,7 +20,8 @@ router.get('/overview', (req, res) => {
   const ativas = db.prepare("SELECT COUNT(*) AS n FROM plates WHERE status='ativa'").get().n;
   const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status='aguardando_pagamento'").get().s;
   const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().n;
-  res.json({ revendedores, faturamento, a_receber: aReceber, pendentes, pagos, placas, ativas, persistente: db.meta.persistente });
+  const freteCobrado = db.prepare("SELECT COALESCE(SUM(shipping_fee),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().s;
+  res.json({ revendedores, faturamento, frete_cobrado: freteCobrado, a_receber: aReceber, pendentes, pagos, placas, ativas, persistente: db.meta.persistente });
 });
 
 // Gera um link de redefinição de senha (vale 24h) para o fornecedor enviar ao revendedor, por exemplo no WhatsApp.
@@ -131,6 +132,16 @@ router.get('/orders', (req, res) => {
   res.json(rows.map(pedidos.decorar));
 });
 
+// Frete fixo cobrado em cada pedido (R$). Vale na hora para novos pedidos; pedidos já feitos não mudam.
+router.get('/frete', (req, res) => res.json({ frete: db.freteFixo() }));
+router.put('/frete', (req, res) => {
+  const v = Number(String((req.body || {}).valor).replace(',', '.'));
+  if (!Number.isFinite(v) || v < 0 || v > 500) return res.status(400).json({ error: 'Informe um valor entre R$ 0,00 e R$ 500,00.' });
+  db.prepare("INSERT INTO settings (chave, valor) VALUES ('frete_fixo', ?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor").run(v.toFixed(2));
+  pedidos.registrarEvento({ origem: 'admin', resultado: 'frete_alterado', detalhe: 'R$ ' + v.toFixed(2) });
+  res.json({ frete: db.freteFixo() });
+});
+
 // Cancelar (só pedido que ainda não foi pago). As demais etapas têm rotas próprias, abaixo.
 router.put('/orders/:id/status', (req, res) => {
   const { status } = req.body || {};
@@ -142,6 +153,20 @@ router.put('/orders/:id/status', (req, res) => {
   }
   db.prepare("UPDATE orders SET status='cancelado' WHERE id=?").run(req.params.id);
   pedidos.registrarEvento({ origem: 'admin', order_id: Number(req.params.id), resultado: 'status_cancelado' });
+  res.json({ ok: true });
+});
+
+// Custo real do envio (o que você pagou aos Correios). Vazio = não informado (null); inválido = false.
+function lerCusto(v) {
+  if (v === undefined || v === null || String(v).trim() === '') return null;
+  const n = Number(String(v).replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 && n <= 5000 ? Math.round(n * 100) / 100 : false;
+}
+router.put('/orders/:id/custo-frete', (req, res) => {
+  const v = lerCusto((req.body || {}).valor);
+  if (v === false) return res.status(400).json({ error: 'Valor inválido.' });
+  const r = db.prepare('UPDATE orders SET custo_frete_real = ? WHERE id = ?').run(v, req.params.id);
+  if (!r.changes) return res.status(404).json({ error: 'Pedido não encontrado.' });
   res.json({ ok: true });
 });
 
@@ -182,8 +207,10 @@ router.post('/orders/:id/enviar', (req, res) => {
   if (r.erro) return res.status(400).json({ error: r.erro });
   const outro = db.prepare('SELECT id FROM orders WHERE tracking_code = ? AND id <> ?').get(r.codigo, id);
   if (outro) return res.status(409).json({ error: `Este código de rastreio já foi usado no pedido #${String(outro.id).padStart(5, '0')}.` });
+  const custo = lerCusto((req.body || {}).custo_frete);
+  if (custo === false) return res.status(400).json({ error: 'Custo do frete inválido. Informe um valor em reais (ex.: 18,90) ou deixe em branco.' });
   db.prepare(`UPDATE orders SET status='enviado', enviado_at=datetime('now'), producao_at=COALESCE(producao_at, datetime('now')),
-    tracking_code=?, shipping_service=? WHERE id=?`).run(r.codigo, r.servico || null, id);
+    tracking_code=?, shipping_service=?, custo_frete_real=COALESCE(?, custo_frete_real) WHERE id=?`).run(r.codigo, r.servico || null, custo, id);
   pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'status_enviado', detalhe: r.codigo });
   res.json(resposta(id));
 });
@@ -198,7 +225,9 @@ router.put('/orders/:id/rastreio', (req, res) => {
   if (r.erro) return res.status(400).json({ error: r.erro });
   const outro = db.prepare('SELECT id FROM orders WHERE tracking_code = ? AND id <> ?').get(r.codigo, id);
   if (outro) return res.status(409).json({ error: `Este código de rastreio já foi usado no pedido #${String(outro.id).padStart(5, '0')}.` });
-  db.prepare('UPDATE orders SET tracking_code=?, shipping_service=? WHERE id=?').run(r.codigo, r.servico || null, id);
+  const custo = lerCusto((req.body || {}).custo_frete);
+  if (custo === false) return res.status(400).json({ error: 'Custo do frete inválido. Informe um valor em reais (ex.: 18,90) ou deixe em branco.' });
+  db.prepare('UPDATE orders SET tracking_code=?, shipping_service=?, custo_frete_real=COALESCE(?, custo_frete_real) WHERE id=?').run(r.codigo, r.servico || null, custo, id);
   pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'rastreio_alterado', detalhe: r.codigo });
   res.json(resposta(id));
 });
@@ -295,5 +324,8 @@ router.post('/price-tiers', (req, res) => {
   tx(tiers);
   res.json({ ok: true });
 });
+
+// Fornecedores, estoque, despesas, custos e lucro estimado
+router.use('/gestao', require('./routes-gestao.js'));
 
 module.exports = router;

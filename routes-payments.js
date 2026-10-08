@@ -107,7 +107,9 @@ function unitPrice(qty) {
   const tiers = db.prepare('SELECT * FROM price_tiers ORDER BY min_qty').all();
   const t = tiers.find(t => qty >= t.min_qty && qty <= t.max_qty);
   if (t) return t.unit_price;
-  return tiers.length ? tiers[0].unit_price : 25; // fallback se a tabela de preços estiver vazia
+  if (!tiers.length) return 25; // fallback se a tabela de preços estiver vazia
+  // acima da última faixa vale o preço da última (nunca cai para o preço da primeira); abaixo da primeira, o da primeira
+  return qty > tiers[tiers.length - 1].max_qty ? tiers[tiers.length - 1].unit_price : tiers[0].unit_price;
 }
 
 // Cria o pedido + inicia o pagamento.
@@ -147,14 +149,16 @@ router.post('/checkout', requireReseller, async (req, res) => {
   const ship = entrega.dados;
 
   const price = unitPrice(qty);
-  const total = Math.round(price * qty * 100) / 100;
+  const frete = db.freteFixo();                                  // frete fixo por pedido
+  const subtotal = Math.round(price * qty * 100) / 100;           // só as placas
+  const total = Math.round((subtotal + frete) * 100) / 100;       // o que o cliente paga
   const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.resellerId);
 
   const orderInfo = db.prepare(
-    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method,
+    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee,
        ship_name, ship_phone, ship_cep, ship_street, ship_number, ship_complement, ship_district, ship_city, ship_state)
-     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(req.resellerId, qty_azul, qty_preta, price, total, method,
+     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(req.resellerId, qty_azul, qty_preta, price, total, method, frete,
         ship.name, ship.phone, ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state);
   const orderId = orderInfo.lastInsertRowid;
   // Guarda como endereço padrão do revendedor (o próximo checkout já vem preenchido).
@@ -168,7 +172,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
       const result = await payment.create({
         body: {
           transaction_amount: total,
-          description: `NexTap — ${qty} placa(s) para ${reseller.name}`,
+          description: `NexTap — ${qty} placa(s)${frete ? ' + frete' : ''} para ${reseller.name}`,
           payment_method_id: 'pix',
           payer: {
             email: String(payer.email).trim(),
@@ -193,7 +197,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
         pix_qr_code: txData?.qr_code || null,
         pix_qr_base64: txData?.qr_code_base64 || null,
         ticket_url: txData?.ticket_url || null,
-        total,
+        total, subtotal, frete,
       });
     }
 
@@ -201,12 +205,10 @@ router.post('/checkout', requireReseller, async (req, res) => {
     const preference = new Preference(client);
     const result = await preference.create({
       body: {
-        items: [{
-          title: `NexTap — ${qty} placa(s) NFC`,
-          quantity: 1,
-          unit_price: total,
-          currency_id: 'BRL',
-        }],
+        items: [
+          { title: `NexTap — ${qty} placa(s) NFC`, quantity: 1, unit_price: subtotal, currency_id: 'BRL' },
+          ...(frete > 0 ? [{ title: 'Frete (envio pelos Correios)', quantity: 1, unit_price: frete, currency_id: 'BRL' }] : []),
+        ],
         payer: { email: String(payer.email).trim(), name: payer.first_name },
         external_reference: String(orderId),
         ...(base.startsWith('https://') ? { notification_url: `${base}/api/payments/webhook` } : {}),
@@ -220,7 +222,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
     });
 
     db.prepare('UPDATE orders SET mp_preference_id=?, checkout_url=? WHERE id=?').run(result.id, result.init_point || null, orderId);
-    return res.json({ order_id: orderId, checkout_url: result.init_point, total });
+    return res.json({ order_id: orderId, checkout_url: result.init_point, total, subtotal, frete});
 
   } catch (err) {
     const { cliente, dica } = interpretarErroMP(err);

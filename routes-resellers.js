@@ -32,6 +32,12 @@ router.put('/me', (req, res) => {
   res.json({ ok: true });
 });
 
+// Valores que o painel mostra antes do pedido: frete fixo e pedido mínimo.
+router.get('/config', (req, res) => {
+  const minimo = db.prepare('SELECT MIN(min_qty) AS m FROM price_tiers').get().m || 1;
+  res.json({ frete: db.freteFixo(), minimo });
+});
+
 // Faixas de preço (públicas para o revendedor logado)
 router.get('/price-tiers', (req, res) => {
   const tiers = db.prepare('SELECT min_qty, max_qty, unit_price FROM price_tiers ORDER BY min_qty').all();

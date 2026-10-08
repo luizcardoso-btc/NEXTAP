@@ -57,7 +57,7 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <h1>Placas de avaliação <span class="grad-tx">Google</span> com NFC + QR Code dinâmico.</h1>
 <p class="mut">Acrílico premium, prontas para revenda ou uso no seu negócio. Aproximou o celular, o cliente já avalia.</p>
 <div class="row"><a class="btn p" id="lnkCriar2" href="#">Criar conta grátis e comprar placas</a><a class="btn" href="#placa">Ver a placa</a></div>
-<div class="chips"><span>✔ Envio para todo o Brasil</span><span>✔ Sem pedido mínimo</span><span>✔ Painel gratuito de revendedor</span></div></div>
+<div class="chips"><span>✔ Envio para todo o Brasil</span><span>✔ Pedido mínimo de 5 placas</span><span>✔ Painel gratuito de revendedor</span></div></div>
 <div class="prod"><img src="/placa.jpg" alt="Placa NexTap de avaliação do Google com NFC e QR Code"></div></div>
 
 <div class="w stats">
@@ -76,13 +76,13 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <div class="grid"><div class="card"><b>1. Crie sua conta</b><span class="mut">Cadastro gratuito, em menos de 1 minuto.</span></div><div class="card"><b>2. Compre no painel</b><span class="mut">Escolha a quantidade e pague por Pix ou cartão.</span></div><div class="card"><b>3. Configure</b><span class="mut">Defina o link do Google de cada cliente.</span></div><div class="card"><b>4. Entregue</b><span class="mut">Instale e finalize a venda.</span></div></div></div></section>
 
 <section id="precos"><div class="w"><div class="c"><span class="tag">PREÇOS</span><h2>Quanto mais você compra, menor o custo por placa.</h2></div><br>
-<div class="price"><div class="tiers" id="tiers"></div>
+<div class="price"><div><div class="tiers" id="tiers"></div><p class="mut" id="freteNota" style="margin:12px 4px 0">📦 + frete fixo de R$ 20,00 por pedido, para todo o Brasil.</p></div>
 <div class="card"><b style="font-size:18px">Simule seu pedido</b>
 <div class="qty"><span><i class="dot" style="background:#1d4ed8"></i>Placa Azul</span><span><button onclick="q('azul',-1)">−</button><b id="qa" style="min-width:34px;text-align:center">25</b><button onclick="q('azul',1)">+</button></span></div>
 <div class="qty"><span><i class="dot" style="background:#111"></i>Placa Preta</span><span><button onclick="q('preta',-1)">−</button><b id="qp" style="min-width:34px;text-align:center">25</b><button onclick="q('preta',1)">+</button></span></div>
-<div class="sum"><div><span>Quantidade</span><b id="sq"></b></div><div><span>Por placa</span><b id="su"></b></div><div class="t"><span>Total</span><span id="st"></span></div><small class="mut" id="sh"></small></div>
+<div class="sum"><div><span>Quantidade</span><b id="sq"></b></div><div><span>Por placa</span><b id="su"></b></div><div class="t"><span>Total</span><span id="st"></span></div><small class="mut" id="sf"></small><small class="mut" id="sh"></small></div>
 <a class="btn p" style="width:100%;text-align:center;display:block" id="lnkCriar3" href="#">Criar conta grátis para fazer esse pedido</a>
-<small class="mut">Sem pedido mínimo · Pix ou cartão de crédito pelo Mercado Pago · já tem conta? <a id="lnkEntrar2" href="#" style="color:var(--pr2);font-weight:700">Entrar</a></small></div></div></div></section>
+<small class="mut">Pedido mínimo de 5 placas · frete fixo por pedido · Pix ou cartão de crédito pelo Mercado Pago · já tem conta? <a id="lnkEntrar2" href="#" style="color:var(--pr2);font-weight:700">Entrar</a></small></div></div></div></section>
 
 <section class="s" id="faq"><div class="w" style="max-width:760px"><div class="c"><span class="tag">FAQ</span><h2>Perguntas frequentes</h2></div><br>
 <details><summary>Existe pedido mínimo?</summary><p class="mut" id="faqMin">Sim. O pedido mínimo é de 5 placas (azuis, pretas ou as duas juntas), feito direto no seu painel.</p></details>
@@ -104,7 +104,7 @@ var APP_URL = "/revendedor/"; // painel do revendedor (mesmo domínio)
 var WHATS = "5575988209055";
 /* ======================= */
 
-var TIERS=[[5,10,21.9],[11,49,17.5],[50,299,16.5],[300,1e9,15.9]],MINQ=5,N={azul:25,preta:25};
+var TIERS=[[5,10,21.9],[11,49,18.9],[50,99,17.9],[100,299,16.9],[300,1e9,15.9]],MINQ=5,FRETE=20,N={azul:25,preta:25};
 function R(n){return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function price(n){for(var i=0;i<TIERS.length;i++)if(n>=TIERS[i][0]&&n<=TIERS[i][1])return TIERS[i][2];return TIERS[0][2]}
 function tl(t){return t[1]>=1e9?t[0]+' a ∞ placas':t[0]===t[1]?t[0]+' placa'+(t[0]>1?'s':''):t[0]+' a '+t[1]+' placas'}
@@ -113,15 +113,16 @@ function theme(){var r=document.documentElement,d=r.dataset.theme==='dark'||(!r.
 function renderTiers(){
 document.getElementById('tiers').innerHTML=TIERS.map(function(t,i){var last=i===TIERS.length-1;return '<div class="'+(last?'best':'')+'"><span>'+tl(t)+(last?' <span class="tag">MELHOR PREÇO</span>':'')+'</span><b>'+R(t[2])+'</b></div>'}).join('');
 document.getElementById('tagLow').textContent='ATACADO · A PARTIR DE '+R(TIERS[TIERS.length-1][2])+' POR PLACA';
+document.getElementById('freteNota').textContent=FRETE>0?'📦 + frete fixo de '+R(FRETE)+' por pedido, para todo o Brasil.':'📦 Frete grátis em todos os pedidos.';
 document.getElementById('faqMin').textContent='Sim. O pedido mínimo é de '+MINQ+' placas (azuis, pretas ou as duas juntas), feito direto no seu painel.'}
 renderTiers();
 (async function(){try{var r=await fetch(API_BASE+'/public/price-tiers');var j=await r.json();
-if(j&&j.tiers&&j.tiers.length){TIERS=j.tiers.map(function(t){return [t.min_qty,t.max_qty>=1e6?1e9:t.max_qty,t.unit_price]});MINQ=j.minimo||TIERS[0][0];renderTiers();calc()}}catch(e){}})();
+if(j&&j.tiers&&j.tiers.length){TIERS=j.tiers.map(function(t){return [t.min_qty,t.max_qty>=1e6?1e9:t.max_qty,t.unit_price]});MINQ=j.minimo||TIERS[0][0];if(typeof j.frete==='number')FRETE=j.frete;renderTiers();calc()}}catch(e){}})();
 document.getElementById('wal').href='https://wa.me/'+WHATS;
 ['lnkEntrar','lnkEntrar2'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=login'});
 ['lnkCriar','lnkCriar2','lnkCriar3'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=registro'});
 function q(c,d){N[c]=Math.max(0,N[c]+d);calc()}
-function calc(){var n=N.azul+N.preta,u=n?price(n):0;qa.textContent=N.azul;qp.textContent=N.preta;sq.textContent=n;su.textContent=R(u);st.textContent=R(n*u);
+function calc(){var n=N.azul+N.preta,u=n?price(n):0;qa.textContent=N.azul;qp.textContent=N.preta;sq.textContent=n;su.textContent=R(u);st.textContent=R(n?n*u+FRETE:0);sf.textContent=n?'Placas '+R(n*u)+' + frete fixo '+R(FRETE)+' (por pedido)':'';
 var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=n<MINQ?'Pedido mínimo: '+MINQ+' placas'+(n?' — faltam '+(MINQ-n)+'.':'.'):nx?'Com mais '+(nx[0]-n)+', cada placa sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
 calc();
 

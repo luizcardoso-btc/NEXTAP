@@ -176,7 +176,8 @@ async function boot(){
   nav('dash');
 }
 function out(){TOKEN=null;ME=null;try{localStorage.removeItem('nx_token');sessionStorage.removeItem('nx_token')}catch(e){}$('app').style.display='none';$('auth').style.display='grid'}
-async function loadTiers(){TIERS=await api('/resellers/price-tiers')}
+var FRETE=0;
+async function loadTiers(){TIERS=await api('/resellers/price-tiers');try{var c=await api('/resellers/config');FRETE=Number(c.frete)||0}catch(e){}}
 async function loadPlates(){PLATES=await api('/resellers/plates')}
 async function loadSales(){SALES=await api('/resellers/sales')}
 async function loadOrders(){ORDERS=await api('/resellers/orders')}
@@ -290,7 +291,7 @@ async function dlS(id){if(!confirm('Excluir venda?'))return;try{await api('/rese
 /* ---- comprar (checkout real com Mercado Pago) ---- */
 function vComprar(){head('Comprar placas','Quanto mais você compra, menor o custo por placa.');var n=N.azul+N.preta,u=n?price(n):0;
 return '<div class="g2"><div class="card"><h3>Tabela de preços</h3>'+TIERS.map(function(t){var l=t.max_qty>=1000000?t.min_qty+' a ∞ placas':t.min_qty===t.max_qty?t.min_qty+' placa'+(t.min_qty>1?'s':''):t.min_qty+' a '+t.max_qty+' placas';return '<div class="tier '+(n>=t.min_qty&&n<=t.max_qty?'on':'')+'"><span>'+l+'</span><span>'+R(t.unit_price)+'</span></div>'}).join('')+'<small class="mut">Pedido mínimo: <b style="color:var(--tx)">'+minQ()+' placas</b> (azuis, pretas ou as duas juntas).<br>Acrílico 2 mm · 10×10 cm · NFC + QR Code dinâmico · fita dupla face</small></div>'+
-'<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n*u)+'</b></div><br>'+(n<minQ()?'<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam '+(minQ()-n)+' placa(s) para o pedido mínimo de '+minQ()+'.</p>':'')+'<button class="btn p" style="width:100%" '+(n<minQ()?'disabled':'')+' onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.<br><b style="color:var(--tx)">Prazo:</b> produção em até '+prazoProd()+' dias úteis após a confirmação do pagamento, mais o prazo dos Correios. Você acompanha tudo em “Meus pedidos”.</small></div></div>'}
+'<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span>Placas</span><b>'+R(n*u)+'</b></div><div class="qty"><span>Frete fixo (envio)</span><b>'+R(n?FRETE:0)+'</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n?n*u+FRETE:0)+'</b></div><br>'+(n<minQ()?'<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam '+(minQ()-n)+' placa(s) para o pedido mínimo de '+minQ()+'.</p>':'')+'<button class="btn p" style="width:100%" '+(n<minQ()?'disabled':'')+' onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.<br><b style="color:var(--tx)">Frete:</b> valor fixo de '+R(FRETE)+' por pedido, para todo o Brasil.<br><b style="color:var(--tx)">Prazo:</b> produção em até '+prazoProd()+' dias úteis após a confirmação do pagamento, mais o prazo dos Correios. Você acompanha tudo em “Meus pedidos”.</small></div></div>'}
 function q(c,d){N[c]=Math.max(0,N[c]+d);draw()}
 var LASTFORM=null,cepLast='';
 function fl(id,label,val,extra){return '<label>'+label+'<input id="'+id+'" value="'+E(val||'')+'" '+(extra||'')+'></label>'}
@@ -301,7 +302,7 @@ function openCheckout(pre){
   var g=function(k,dflt){return a[k]!=null?a[k]:(dflt||'')};
   var row2='display:grid;grid-template-columns:1fr 1fr;gap:10px';
   cepLast='';$('mb').style.maxWidth='520px';
-  mo('<h3 style="margin:0">Finalizar pedido</h3><p class="mut">'+n+' placa(s) · '+R(n*u)+' no total</p>'
+  mo('<h3 style="margin:0">Finalizar pedido</h3><p class="mut">'+n+' placa(s) · '+R(n*u)+' + frete '+R(FRETE)+' = <b style="color:var(--tx)">'+R(n*u+FRETE)+'</b></p>'
   +'<b>Dados do pagamento</b>'
   +'<div style="'+row2+'">'+fl('p1','Nome',fname)+fl('p2','Sobrenome',lname)+'</div>'
   +'<label>E-mail para o pagamento<input id="p3" type="email" value="'+E(f.email||ME.email)+'"></label>'
@@ -312,6 +313,7 @@ function openCheckout(pre){
   +fl('e2','Telefone / WhatsApp com DDD',g('phone',ME.whatsapp),'inputmode="tel" autocomplete="tel" placeholder="(75) 90000-0000"')
   +'<div style="'+row2+'">'+fl('e3','CEP',g('cep',ME.addr_cep),'inputmode="numeric" maxlength="9" placeholder="00000-000" oninput="buscaCep()" autocomplete="postal-code"')+fl('e4','Número',g('number',ME.addr_number),'placeholder="S/N se não houver"')+'</div>'
   +'<small class="mut" id="cepMsg" style="margin-top:-6px"></small>'
+  +'<div id="frl" style="background:var(--soft);border-radius:10px;padding:10px 12px;font-size:14px">'+freteTxt(g('city',ME.addr_city),g('state',ME.addr_state),n*u)+'</div>'
   +fl('e5','Rua / Avenida',g('street',ME.addr_street),'autocomplete="address-line1"')
   +fl('e6','Complemento (opcional)',g('complement',ME.addr_complement),'placeholder="Apto, bloco, ponto de referência"')
   +fl('e7','Bairro',g('district',ME.addr_district))
@@ -319,6 +321,7 @@ function openCheckout(pre){
   +'<div class="row"><button class="btn p" onclick="doCheckout()">Continuar</button><button class="btn" onclick="cl()">Cancelar</button></div>');
   $('p4').value=f.method||'pix';
 }
+function freteTxt(cid,uf,sub){return '📦 <b>Frete'+(cid?' para '+E(cid)+(uf?'/'+E(uf):''):'')+': '+R(FRETE)+'</b> <span class="mut">(valor fixo, qualquer CEP do Brasil)</span><br><span class="mut">Total do pedido com frete: <b style="color:var(--tx)">'+R(sub+FRETE)+'</b></span>'}
 function buscaCep(){
   var i=$('e3');if(!i)return;var d=i.value.replace(/\D/g,''),m=$('cepMsg');
   if(d.length!==8){cepLast='';if(m)m.textContent='';return}
@@ -328,6 +331,7 @@ function buscaCep(){
     if(j.erro){if($('cepMsg'))$('cepMsg').textContent='CEP não encontrado. Preencha o endereço manualmente.';return}
     $('e5').value=j.logradouro||$('e5').value;$('e7').value=j.bairro||$('e7').value;$('e8').value=j.localidade||$('e8').value;$('e9').value=j.uf||$('e9').value;
     if($('cepMsg'))$('cepMsg').textContent='Endereço preenchido. Confira e informe o número.';
+    var fl=$('frl');if(fl){var nn=N.azul+N.preta;fl.innerHTML=freteTxt($('e8').value,$('e9').value,nn*price(nn))}
     if(!$('e4').value)$('e4').focus();
   }).catch(function(){if($('cepMsg'))$('cepMsg').textContent='Não consegui buscar o CEP agora. Preencha o endereço manualmente.'});
 }
@@ -359,7 +363,7 @@ function copyPix(){
 }
 function showPix(r){
 PIXCODE=r.pix_qr_code||'';
-mo('<h3 style="margin:0">Pague com Pix</h3><p class="mut">Total: '+R(r.total)+'</p>'
+mo('<h3 style="margin:0">Pague com Pix</h3><p class="mut">Total: '+R(r.total)+(r.frete?' (placas '+R(r.subtotal)+' + frete '+R(r.frete)+')':'')+'</p>'
 +(r.pix_qr_base64?'<div style="text-align:center"><img alt="QR Code Pix" src="data:image/png;base64,'+r.pix_qr_base64+'" style="width:220px;height:220px;background:#fff;padding:6px;border-radius:8px"></div><p class="mut" style="text-align:center;margin:6px 0">Abra o app do seu banco, escolha <b>Pix → Ler QR Code</b>.</p>':'')
 +(PIXCODE?'<label>Pix copia e cola (chave do pagamento)<input id="pxc" readonly value="'+E(PIXCODE)+'" onclick="this.select()"></label><button class="btn p" id="cpb" style="width:100%" onclick="copyPix()">Copiar código Pix</button>':'')
 +(r.ticket_url?'<p style="margin:8px 0"><a href="'+E(r.ticket_url)+'" target="_blank" rel="noopener">Abrir página de pagamento do Pix</a></p>':'')
@@ -397,7 +401,7 @@ function vPedidos(){head('Meus pedidos','Acompanhe o pagamento e a entrega das s
   var av=pend.length?'<div class="card" style="border-color:#f59e0b;margin-top:14px"><b>'+pend.length+' pedido(s) aguardando pagamento.</b> <span class="mut">Assim que o pagamento for confirmado, suas placas aparecem em “Minhas placas” automaticamente.</span></div>':'';
   return av+'<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Andamento do pedido</th><th>Entrega</th><th>Status</th><th></th></tr>'+(ORDERS.length?ORDERS.map(function(o){
     var acao=o.status==='aguardando_pagamento'?'<button class="btn s p" onclick="reabrirPag('+o.id+')">'+(o.payment_method==='pix'?'Ver Pix / pagar':'Pagar agora')+'</button>':'';
-    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
+    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+(o.shipping_fee>0?'<br><small class="mut">inclui frete '+R(o.shipping_fee)+'</small>':'')+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
 async function reabrirPag(id){
   try{var r=await api('/payments/orders/'+id+'/pagamento');
     if(r.metodo==='pix'&&(r.pix_qr_code||r.pix_qr_base64)){showPix({order_id:r.order_id,total:r.total,pix_qr_code:r.pix_qr_code,pix_qr_base64:r.pix_qr_base64})}
