@@ -249,7 +249,7 @@ function finLucro(){
    +linhaDRE('Taxas do Mercado Pago',L.taxas_mp,{menos:1,sub:L.taxas_reais+' real(is), '+L.taxas_estimadas+' estimada(s)'})
    +linhaDRE('Envio (Correios)',L.custo_envio,{menos:1,sub:L.envio_real+' com custo real, '+L.envio_estimado+' estimado(s) a '+R(c.custo_envio_padrao)})
    +linhaDRE('Lucro bruto',L.lucro_bruto,{forte:1,cor:sinal(L.lucro_bruto)})
-   +linhaDRE('Despesas operacionais',L.despesas,{menos:1,sub:L.despesas_itens.length?L.despesas_itens.map(function(d){return E(d.descricao)+(d.mensal?' (mensal)':'')}).join(', '):'nenhuma lançada — cadastre em "Despesas"'})
+   +linhaDRE('Despesas operacionais',L.despesas,{menos:1,sub:L.despesas_itens.length?L.despesas_itens.map(function(d){return E(d.descricao)+' '+R(d.valor_periodo)+(d.mensal?' (mensal: '+d.dias_rateio+' dia(s) de '+R(d.valor)+'/mês)':'')}).join(' · '):'nenhuma lançada — cadastre em "Despesas"'})
    +linhaDRE('LUCRO ESTIMADO FINAL',L.lucro_final,{forte:1,cor:sinal(L.lucro_final)})
    +'</table></div><div class="row" style="margin-top:10px;align-items:center"><small class="mut">'+(L.taxas_estimadas?L.taxas_estimadas+' pedido(s) com taxa estimada. ':'')+(L.envio_estimado?L.envio_estimado+' pedido(s) sem o custo real do envio informado.':'')+'</small>'+(L.taxas_estimadas?'<button class="btn s" onclick="buscarTaxas()">🔄 Buscar taxas reais no Mercado Pago</button>':'')+'</div></div>';
   var e=L.estoque,ar=L.a_receber;

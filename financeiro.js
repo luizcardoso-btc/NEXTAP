@@ -63,18 +63,19 @@ function configuracao() {
 
 // ---------- despesas (únicas e mensais rateadas por dia) ----------
 function despesasDoPeriodo(j, primeiraData) {
-  const iniData = j.iniMs === null ? (primeiraData || j.hoje) : new Date(j.iniMs - 3 * 3600e3).toISOString().slice(0, 10);
+  // "Todo o período" começa na data mais antiga entre o primeiro pedido pago e a primeira despesa lançada (antes, despesas anteriores ao 1º pedido sumiam).
+  const iniData = j.iniMs === null ? ([primeiraData, um('SELECT MIN(data) d FROM despesas').d].filter(Boolean).sort()[0] || j.hoje) : new Date(j.iniMs - 3 * 3600e3).toISOString().slice(0, 10);
   const fimData = j.hoje;
   const dias = Math.max(1, Math.round((new Date(fimData + 'T12:00:00Z') - new Date(iniData + 'T12:00:00Z')) / 864e5) + 1);
   let total = 0; const itens = [];
   for (const d of db.prepare('SELECT * FROM despesas ORDER BY data DESC').all()) {
-    let v = 0;
+    let v = 0, rateio = 0;
     if (!d.mensal) { if (d.data >= iniData && d.data <= fimData) v = d.valor; }
     else {
       const de = d.data > iniData ? d.data : iniData;
-      if (de <= fimData) { const dd = Math.round((new Date(fimData + 'T12:00:00Z') - new Date(de + 'T12:00:00Z')) / 864e5) + 1; v = d.valor * dd / 30.4375; }
+      if (de <= fimData) { const dd = Math.round((new Date(fimData + 'T12:00:00Z') - new Date(de + 'T12:00:00Z')) / 864e5) + 1; rateio = dd; v = d.valor * dd / 30.4375; }
     }
-    if (v > 0) { total += v; itens.push({ id: d.id, descricao: d.descricao, categoria: d.categoria, mensal: !!d.mensal, valor_periodo: r2(v) }); }
+    if (v > 0) { total += v; itens.push({ id: d.id, descricao: d.descricao, categoria: d.categoria, mensal: !!d.mensal, valor: d.valor, dias_rateio: rateio, valor_periodo: r2(v) }); }
   }
   return { total: r2(total), itens, dias, iniData, fimData };
 }
