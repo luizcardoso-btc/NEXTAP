@@ -5,8 +5,12 @@ const db = require('./database.js');
 const sha = t => crypto.createHash('sha256').update(String(t)).digest('hex');
 
 function baseUrl(req) {
-  const b = (process.env.PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '');
-  return /^https:\/\//i.test(b) ? b : `${req.protocol}://${req.get('host')}`;
+  // Só o endereço do site (https://dominio). Se a variável vier com caminho junto (ex.: .../api/payments/webhook), o caminho é descartado.
+  try {
+    const u = new URL((process.env.PUBLIC_BACKEND_URL || '').trim());
+    if (u.protocol === 'https:') return u.origin;
+  } catch (e) { /* variável ausente ou inválida: usa o endereço da própria requisição */ }
+  return `${req.protocol}://${req.get('host')}`;
 }
 
 // Gera um link novo (invalida os anteriores do mesmo revendedor).
