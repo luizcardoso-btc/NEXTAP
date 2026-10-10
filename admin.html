@@ -44,6 +44,7 @@ main{padding:24px;min-width:0}.top{display:flex;justify-content:space-between;ga
 <div id="app">
 <aside><a class="logo lgc" href="/" aria-label="NexTap"><img src="/logo.png" alt="NexTap" class="lg"></a><small style="margin-top:4px">PAINEL ADMIN · FORNECEDOR</small>
 <small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a>
+<small>DOCUMENTOS</small><a data-v="decl" onclick="nav('decl')" style="background:#15803d;color:#fff;font-weight:700">🧾 Declaração e NF-e</a>
 <small>GESTÃO</small><a data-v="fin" onclick="nav('fin')">💰 Financeiro</a><a data-v="forn" onclick="nav('forn')">🏭 Fornecedores</a><a data-v="cfg" onclick="nav('cfg')">⚙ Preços</a><a data-v="dados" onclick="nav('dados')">🛡 Dados e backups</a>
 <div class="me"><div class="av">A</div><div><b>Admin</b><div class="mut" style="color:#7d8c86">Fornecedor</div></div><button class="btn s" style="margin-left:auto" onclick="out()" title="Sair">⎋</button></div></aside>
 <main><div class="top"><div id="hd"></div><span class="row" style="margin:0"><button class="btn" onclick="baixarBackup()" title="Baixar uma cópia completa dos dados">⬇ Backup</button><button class="btn" onclick="theme()">◐</button></span></div><div id="v"></div></main></div>
@@ -85,11 +86,11 @@ OVER=r[0];REVS=r[1];ORDERS=r[2];PLATES=r[3];TIERS=r[4]}
 function inP(x){var d=U(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias'],['month','Este mês'],['all','Tudo']].map(function(p){return '<button class="pill '+(per===p[0]?'on':'')+'" onclick="per=\''+p[0]+'\';draw()">'+p[1]+'</button>'}).join('')+'</div>'}
 function head(t,s){$('hd').innerHTML='<h2>'+t+'</h2><span class="mut">'+s+'</span>'}
-function nav(v){cur=v;if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
+function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
 function mo(h){$('mb').innerHTML=h;$('mo').style.display='grid'}function cl(){$('mo').style.display='none'}
 $('mo').onclick=function(e){if(e.target===this)cl()};
 function draw(){var aviso=(OVER&&OVER.persistente===false)?'<div class="card" style="border-color:#dc2626;margin-bottom:12px"><b style="color:#dc2626">⚠ Atenção: os dados não estão sendo guardados de forma permanente.</b><br><span class="mut">No Railway, crie um Volume (montado em /data) e conecte ao serviço. Até lá, cadastros e pedidos são apagados a cada atualização do sistema.</span></div>':'';
-$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados})[cur]()}
+$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
 async function baixarBackup(){
   try{
     var r=await fetch(API_BASE+'/admin/backup',{headers:{Authorization:'Bearer '+TOKEN}});
@@ -151,7 +152,7 @@ function vPedidos(){head('Pedidos','Acompanhe o pagamento, a produção e o envi
     return s};
   return pills+resumo+banner+lote+'<div class="card" style="margin-top:12px"><div class="tw"><table><tr><th></th><th>Pedido</th><th>Revendedor</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Pago em</th><th>Entrega</th><th>Status</th><th>Ações</th></tr>'
   +(lista.length?lista.map(function(o){
-    return '<tr><td>'+(o.status==='pago'?'<input type="checkbox" style="width:auto" '+(SEL[o.id]?'checked':'')+' onchange="SEL['+o.id+']=this.checked;draw()">':'')+'</td><td>#'+pad5(o.id)+'</td><td>'+E(o.reseller_name)+'</td><td>'+fdh(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+(o.shipping_fee>0?'<span class="sm">inclui frete '+R(o.shipping_fee)+'</span>':'')+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+(o.paid_at?fdh(o.paid_at)+(o.paid_manually?'<span class="sm" title="'+E(o.payment_note||'')+'">confirmado manualmente</span>':''):'—')+'</td><td>'+(o.ship_street?'<button class="btn s" onclick="verEnt('+o.id+')">📍 '+E(o.ship_city)+'/'+E(o.ship_state)+'</button>':'<span class="mut">—</span>')+'</td><td>'+stTag(o.status)+extra(o)+'</td><td style="white-space:nowrap">'+acoes(o)+'</td></tr>'}).join(''):'<tr><td colspan="12" class="mut">Nenhum pedido nesta situação.</td></tr>')
+    return '<tr><td>'+(o.status==='pago'?'<input type="checkbox" style="width:auto" '+(SEL[o.id]?'checked':'')+' onchange="SEL['+o.id+']=this.checked;draw()">':'')+'</td><td>#'+pad5(o.id)+(typeof docBtns==='function'?'<div style="margin-top:6px;white-space:nowrap">'+docBtns(o)+'</div>':'')+'</td><td>'+E(o.reseller_name)+'</td><td>'+fdh(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+(o.shipping_fee>0?'<span class="sm">inclui frete '+R(o.shipping_fee)+'</span>':'')+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+(o.paid_at?fdh(o.paid_at)+(o.paid_manually?'<span class="sm" title="'+E(o.payment_note||'')+'">confirmado manualmente</span>':''):'—')+'</td><td>'+(o.ship_street?'<button class="btn s" onclick="verEnt('+o.id+')">📍 '+E(o.ship_city)+'/'+E(o.ship_state)+'</button>':'<span class="mut">—</span>')+'</td><td>'+stTag(o.status)+extra(o)+'</td><td style="white-space:nowrap">'+acoes(o)+'</td></tr>'}).join(''):'<tr><td colspan="12" class="mut">Nenhum pedido nesta situação.</td></tr>')
   +'</table></div><small class="mut">Fluxo: Aguardando pagamento → <b>Pedido recebido</b> (pago) → <b>Em produção</b> (prazo de '+(lista[0]&&lista[0].prazo_producao_dias||5)+' dias úteis) → <b>Enviado</b> (com código de rastreio dos Correios) → <b>Entregue</b>. O revendedor acompanha cada etapa no painel dele.</small></div>'}
 function selTodos(on){ORDERS.filter(function(o){return o.status==='pago'}).forEach(function(o){SEL[o.id]=on});draw()}
 async function loteProd(){var ids=Object.keys(SEL).filter(function(k){return SEL[k]}).map(Number);if(!ids.length)return;
@@ -372,4 +373,4 @@ async function tSave(){try{await api('/admin/price-tiers',{method:'POST',body:JS
 
 (function(){var t=null;try{t=localStorage.getItem('nx_admin_token')}catch(e){}
 if(t){TOKEN=t;boot().catch(function(){out()})}})();
-</script></body></html>
+</script><script src="/admin-declaracao.js"></script></body></html>
