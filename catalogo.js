@@ -3,6 +3,7 @@
 // - Público: GET /api/public/catalogo (sem custo). Admin: /api/admin/catalogo e a página /admin/catalogo.
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const db = require('./database.js');
 const { requireAdmin } = require('./auth-middleware.js');
 
@@ -18,6 +19,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS produtos (
   pedido_ativo INTEGER NOT NULL DEFAULT 0,
   ordem INTEGER NOT NULL DEFAULT 0
 )`);
+
+// Colunas novas (idempotente): imagem do produto e "preço segue a tabela atual de vendas".
+const cols = db.prepare("PRAGMA table_info(produtos)").all().map(c => c.name);
+if (!cols.includes('imagem')) db.exec("ALTER TABLE produtos ADD COLUMN imagem TEXT NOT NULL DEFAULT ''");
+if (!cols.includes('usa_tabela')) {
+  db.exec("ALTER TABLE produtos ADD COLUMN usa_tabela INTEGER NOT NULL DEFAULT 0");
+  db.exec("UPDATE produtos SET usa_tabela = 1 WHERE categoria LIKE 'Placas%'"); // placas NFC + QR seguem a tabela atual de vendas
+}
 
 // Carga inicial: roda uma única vez (marcada em settings), assim o que você editar/excluir depois não volta.
 const jaSemeou = db.prepare("SELECT valor FROM settings WHERE chave = 'catalogo_seed'").get();
@@ -35,19 +44,27 @@ if (!jaSemeou) {
     [D, 'Display Redes Sociais 10×14', 'Display de balcão 10×14 cm', '#7c3aed', 21, 0],
     [D, 'Display WhatsApp', 'Display de balcão · abre o WhatsApp', '#22c55e', 21, 0],
   ];
-  const ins = db.prepare('INSERT INTO produtos (categoria, nome, descricao, cor, custo, pedido_ativo, ordem) VALUES (?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO produtos (categoria, nome, descricao, cor, custo, pedido_ativo, ordem, usa_tabela) VALUES (?,?,?,?,?,?,?,?)');
   db.transaction(() => {
-    itens.forEach((x, i) => ins.run(x[0], x[1], x[2], x[3], x[4], x[5], i + 1));
+    itens.forEach((x, i) => ins.run(x[0], x[1], x[2], x[3], x[4], x[5], i + 1, x[0] === P ? 1 : 0));
     db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('catalogo_seed', '1')").run();
   })();
 }
 
+const pastaImg = path.join(path.dirname(db.meta.arquivo), 'catalogo-img');
+fs.mkdirSync(pastaImg, { recursive: true });
 const router = express.Router();
+router.use('/catalogo-img', express.static(pastaImg, { maxAge: '30d', immutable: true }));
 const num = v => (v === '' || v === null || v === undefined || !isFinite(Number(v)) || Number(v) < 0) ? null : Math.round(Number(v) * 100) / 100;
 
 // Público: só o que o cliente pode ver (sem custo). preco = null → "preço em breve".
+// usa_tabela = 1 → o preço é o da tabela atual de vendas (tiers), que vai junto na resposta.
 router.get('/api/public/catalogo', (req, res) => {
-  res.json(db.prepare('SELECT id, categoria, nome, descricao, cor, preco, pedido_ativo FROM produtos WHERE ativo = 1 ORDER BY ordem, id').all());
+  res.set('Cache-Control', 'no-cache');
+  res.json({
+    produtos: db.prepare('SELECT id, categoria, nome, descricao, cor, preco, pedido_ativo, imagem, usa_tabela FROM produtos WHERE ativo = 1 ORDER BY ordem, id').all(),
+    tiers: db.prepare('SELECT min_qty, max_qty, unit_price FROM price_tiers ORDER BY min_qty').all(),
+  });
 });
 
 const adm = express.Router();
@@ -68,15 +85,40 @@ adm.put('/:id', (req, res) => {
   const b = req.body || {};
   const nome = b.nome !== undefined ? String(b.nome).trim() : p.nome;
   if (!nome) return res.status(400).json({ error: 'O nome não pode ficar vazio.' });
-  db.prepare('UPDATE produtos SET nome=?, descricao=?, categoria=?, custo=?, preco=?, ativo=? WHERE id=?').run(
+  db.prepare('UPDATE produtos SET nome=?, descricao=?, categoria=?, custo=?, preco=?, ativo=?, usa_tabela=? WHERE id=?').run(
     nome, b.descricao !== undefined ? String(b.descricao).trim() : p.descricao,
     b.categoria !== undefined ? (String(b.categoria).trim() || p.categoria) : p.categoria,
     b.custo !== undefined ? (num(b.custo) ?? p.custo) : p.custo,
     b.preco !== undefined ? num(b.preco) : p.preco,
-    b.ativo !== undefined ? (b.ativo ? 1 : 0) : p.ativo, id);
+    b.ativo !== undefined ? (b.ativo ? 1 : 0) : p.ativo,
+    b.usa_tabela !== undefined ? (b.usa_tabela ? 1 : 0) : p.usa_tabela, id);
   res.json({ ok: true });
 });
-router.use('/api/admin/catalogo', express.json({ limit: '50kb' }), adm);
+// Imagem do produto: o painel manda a foto já reduzida (data URL). Salva no Volume e troca no site na hora.
+const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const apagaImg = url => { if (/^\/catalogo-img\/[\w.-]+$/.test(url || '')) fs.unlink(path.join(pastaImg, path.basename(url)), () => {}); };
+adm.put('/:id/imagem', (req, res) => {
+  const id = Number(req.params.id), p = db.prepare('SELECT imagem FROM produtos WHERE id = ?').get(id);
+  if (!p) return res.status(404).json({ error: 'Produto não encontrado.' });
+  const b = req.body || {};
+  if (b.remover) { apagaImg(p.imagem); db.prepare("UPDATE produtos SET imagem = '' WHERE id = ?").run(id); return res.json({ imagem: '' }); }
+  if (typeof b.url === 'string' && b.url.trim()) { // link externo (https) em vez de arquivo
+    const u = b.url.trim();
+    if (!/^https:\/\/[^\s"'<>]+$/i.test(u)) return res.status(400).json({ error: 'Use um link https válido.' });
+    apagaImg(p.imagem); db.prepare('UPDATE produtos SET imagem = ? WHERE id = ?').run(u, id); return res.json({ imagem: u });
+  }
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(b.data || ''));
+  if (!m) return res.status(400).json({ error: 'Envie uma imagem JPG, PNG ou WebP.' });
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'Imagem grande demais (máx. 3 MB).' });
+  const nome = `p${id}-${Date.now()}.${EXT[m[1]]}`;
+  fs.writeFileSync(path.join(pastaImg, nome), buf);
+  apagaImg(p.imagem);
+  const url = '/catalogo-img/' + nome;
+  db.prepare('UPDATE produtos SET imagem = ? WHERE id = ?').run(url, id);
+  res.json({ imagem: url });
+});
+router.use('/api/admin/catalogo', express.json({ limit: '4mb' }), adm);
 
 const arq = f => (req, res) => res.sendFile(path.join(__dirname, f));
 router.get('/catalogo-front.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'catalogo-front.js')));
