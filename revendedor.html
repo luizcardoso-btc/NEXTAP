@@ -458,4 +458,4 @@ at(RESET_TOKEN?'r':initialTab==='login'?'e':'c');
 var RET=qs.get('pedido');
 (function(){var t=RESET_TOKEN?null:readToken();
 if(t){TOKEN=t;boot().then(function(){if(RET){nav('pedidos');api('/payments/orders/'+RET+'/status').then(function(o){return Promise.all([loadOrders(),loadPlates()]).then(function(){draw();toast(o.status==='pago'?'Pagamento aprovado! Suas placas já estão no estoque ✓':'Recebemos seu retorno. Assim que o pagamento for confirmado o pedido muda para Pago.')})}).catch(function(){});try{history.replaceState(null,'',location.pathname)}catch(e){}}}).catch(function(){out()})}})();
-</script></body></html>
+</script><script src="/catalogo-front.js"></script></body></html>

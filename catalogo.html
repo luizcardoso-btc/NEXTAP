@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Catálogo de produtos · NexTap</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<style>
+:root{--pr:#15803d;--bg:#f6f7f9;--cd:#fff;--tx:#111827;--mu:#6b7280;--bd:#e5e7eb}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1115;--cd:#181b21;--tx:#f3f4f6;--mu:#9ca3af;--bd:#2a2f38}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--tx)}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:20px;margin:0 0 4px}.mut{color:var(--mu);font-size:13px}
+.card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-top:14px}
+input,select{width:100%;padding:8px 9px;border:1px solid var(--bd);border-radius:9px;background:var(--bg);color:var(--tx);font:inherit}
+button{padding:8px 13px;border-radius:9px;border:1px solid var(--bd);background:var(--cd);color:var(--tx);font:inherit;font-weight:600;cursor:pointer}
+button.p{background:var(--pr);border-color:var(--pr);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:760px}th,td{padding:7px 6px;text-align:left;border-bottom:1px solid var(--bd)}th{font-size:12px;color:var(--mu)}
+.scroll{overflow-x:auto}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+#aviso{display:none;background:#fef3c7;color:#92400e;border-radius:10px;padding:10px 12px;margin-top:12px}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;border:1px solid var(--bd);vertical-align:middle;margin-right:6px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Catálogo de produtos</h1>
+  <div class="mut">Produtos exibidos na LP e no checkout do revendedor. <a href="/admin/" style="color:var(--pr)">← Voltar ao painel</a></div>
+  <div id="aviso"></div>
+  <div class="card">
+    <div class="mut" style="margin-bottom:8px"><b>Preço de venda</b> vazio = aparece “Preço em breve” para o cliente. O <b>custo</b> é só seu: nunca aparece no site.</div>
+    <div class="scroll"><table><thead><tr><th>Categoria</th><th>Produto</th><th>Custo (R$)</th><th>Preço de venda (R$)</th><th>Exibir</th><th></th></tr></thead><tbody id="lista"></tbody></table></div>
+  </div>
+  <div class="card">
+    <b>Adicionar produto</b>
+    <div class="row">
+      <input id="n_cat" placeholder="Categoria (ex.: Displays)" style="flex:1;min-width:150px" list="cats">
+      <input id="n_nome" placeholder="Nome do produto" style="flex:2;min-width:180px">
+      <input id="n_custo" placeholder="Custo" inputmode="decimal" style="width:100px">
+      <button class="p" onclick="novo()">Adicionar</button>
+    </div>
+    <datalist id="cats"><option>Placas NFC + QR Code</option><option>Displays</option><option>Cartões NFC</option></datalist>
+  </div>
+</main>
+<script>
+var TOKEN=null;try{TOKEN=localStorage.getItem('nx_admin_token')}catch(e){}
+var $=function(i){return document.getElementById(i)};
+var E=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+function aviso(t){var a=$('aviso');a.textContent=t;a.style.display=t?'block':'none'}
+async function api(p,o){o=o||{};o.headers={Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'};
+  var r=await fetch('/api/admin/catalogo'+p,o);
+  if(r.status===401){aviso('Sessão expirada. Entre novamente em /admin/ e volte para esta página.');throw new Error('401')}
+  var j={};try{j=await r.json()}catch(e){}
+  if(!r.ok)throw new Error(j.error||'Erro inesperado.');return j}
+async function carregar(){
+  if(!TOKEN){aviso('Entre primeiro no painel em /admin/ e depois abra esta página.');return}
+  try{var l=await api('');
+    $('lista').innerHTML=l.map(function(p){return '<tr><td>'+E(p.categoria)+'</td><td><span class="sw" style="background:'+E(p.cor)+'"></span><input id="nm'+p.id+'" value="'+E(p.nome)+'" style="width:calc(100% - 22px)"></td>'
+      +'<td><input id="cu'+p.id+'" value="'+(p.custo||'')+'" inputmode="decimal" style="width:90px"></td>'
+      +'<td><input id="pr'+p.id+'" value="'+(p.preco==null?'':p.preco)+'" inputmode="decimal" placeholder="em breve" style="width:100px"></td>'
+      +'<td><input type="checkbox" id="at'+p.id+'" '+(p.ativo?'checked':'')+' style="width:auto"></td>'
+      +'<td><button class="p" onclick="salvar('+p.id+')">Salvar</button></td></tr>'}).join('');
+  }catch(e){if(e.message!=='401')aviso(e.message)}}
+async function salvar(id){
+  try{await api('/'+id,{method:'PUT',body:JSON.stringify({nome:$('nm'+id).value,custo:$('cu'+id).value.replace(',','.'),preco:$('pr'+id).value.replace(',','.'),ativo:$('at'+id).checked})});aviso('');alert('Salvo ✓')}
+  catch(e){if(e.message!=='401')alert(e.message)}}
+async function novo(){
+  try{await api('',{method:'POST',body:JSON.stringify({categoria:$('n_cat').value,nome:$('n_nome').value,custo:$('n_custo').value.replace(',','.')})});$('n_cat').value=$('n_nome').value=$('n_custo').value='';carregar()}
+  catch(e){if(e.message!=='401')alert(e.message)}}
+carregar();
+</script>
+</body>
+</html>

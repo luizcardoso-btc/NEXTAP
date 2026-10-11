@@ -60,6 +60,7 @@ app.use('/api/auth', require('./routes-auth.js'));
 app.use('/api/resellers', require('./routes-resellers.js'));
 app.use('/api/payments', require('./routes-payments.js'));
 app.use('/api/admin', require('./routes-admin.js'));
+app.use('/', require('./catalogo.js')); // catálogo de produtos (LP + checkout do revendedor + /admin/catalogo)
 app.use('/', require('./declaracao-conteudo.js')); // declaração de conteúdo em PDF (página /admin/declaracao + API)
 app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / NFC da placa e /api/public/stats
 
