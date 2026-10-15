@@ -26,24 +26,28 @@ function gerarPlacas(orderId) {
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!order) return;
   const insert = db.prepare(`INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)`);
-  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ?');
+  const estoque = require('./estoque-qr.js');
+  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ? UNION SELECT 1 FROM qr_estoque WHERE numero = ?');
   const gravaCodigo = db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?');
-  const novoCodigo = id => { let n = id, c; do { c = '#' + String(n).padStart(5, '0'); n++; } while (existe.get(c)); return c; };
+  const novoCodigo = id => { let n = id, c; do { c = '#' + String(n).padStart(5, '0'); n++; } while (existe.get(c, c)); return c; };
   const criar = cor => {
-    const r = insert.run(order.reseller_id, order.id, nanoid(10), cor, order.unit_price);
-    gravaCodigo.run(novoCodigo(Number(r.lastInsertRowid)), r.lastInsertRowid);
+    const q = estoque.pegar(cor); // QR já numerado e enviado ao fornecedor; sem estoque, gera na hora (como antes)
+    const r = insert.run(order.reseller_id, order.id, q ? q.code : nanoid(10), cor, order.unit_price);
+    gravaCodigo.run(q ? q.numero : novoCodigo(Number(r.lastInsertRowid)), r.lastInsertRowid);
+    if (q) estoque.vincular(q.id, r.lastInsertRowid);
   };
   for (let i = 0; i < order.qty_azul; i++) criar('azul');
   for (let i = 0; i < order.qty_preta; i++) criar('preta');
+  try { estoque.verificarReposicao(); } catch (e) { console.error('[QR-ESTOQUE] reposição automática falhou:', e.message); }
 }
 
 // Placas de teste (sem pedido): para o fornecedor testar NFC/QR e a configuração no painel.
 function criarPlacasTeste(resellerId, quantidade) {
   const n = Math.max(1, Math.min(50, parseInt(quantidade, 10) || 1));
   const insert = db.prepare(`INSERT INTO plates (reseller_id, order_id, code, color, status, cost, plate_label) VALUES (?, NULL, ?, ?, 'estoque', 0, 'Placa de teste')`);
-  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ?');
+  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ? UNION SELECT 1 FROM qr_estoque WHERE numero = ?');
   const grava = db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?');
-  const novo = id => { let k = id, c; do { c = '#' + String(k).padStart(5, '0'); k++; } while (existe.get(c)); return c; };
+  const novo = id => { let k = id, c; do { c = '#' + String(k).padStart(5, '0'); k++; } while (existe.get(c, c)); return c; };
   return db.transaction(() => {
     const out = [];
     for (let i = 0; i < n; i++) {
