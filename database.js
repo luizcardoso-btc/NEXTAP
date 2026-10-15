@@ -334,6 +334,22 @@ CREATE TABLE IF NOT EXISTS sales (
     INSERT OR IGNORE INTO settings (chave, valor) VALUES ('estoque_minimo', '50');
     INSERT OR IGNORE INTO settings (chave, valor) VALUES ('custo_usar_medio', '0');
   `),
+  // v12 — serviço "Link de avaliação do Google": negócios convertidos, plano do usuário e pagamentos (Pix mensal). Só adiciona.
+  db => db.exec(`
+    ALTER TABLE resellers ADD COLUMN gl_plano TEXT;
+    ALTER TABLE resellers ADD COLUMN gl_ate TEXT;
+    CREATE TABLE IF NOT EXISTS gl_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+      place_key TEXT NOT NULL, link TEXT NOT NULL, nome TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (reseller_id, place_key)
+    );
+    CREATE TABLE IF NOT EXISTS gl_pagamentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+      plano TEXT NOT NULL, valor REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pendente',
+      mp_payment_id TEXT UNIQUE, pix_qr_code TEXT, pix_qr_base64 TEXT,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), pago_em TEXT
+    );
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

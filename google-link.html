@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link de Avaliação do Google — NexTap</title>
+<meta name="description" content="Transforme o link do Google Meu Negócio no link direto de avaliação. 10 grátis, depois a partir de R$ 9,90/mês.">
+<link rel="icon" href="/favicon.png">
+<style>
+:root{--bg:#f0f5f1;--card:#fff;--tx:#0f1a13;--mut:#5b6b60;--br:#dfe8e2;--pr:#15803d;--pr2:#0f6a31;--soft:#e4f0e8;--warn:#b45309}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1410;--card:#16211b;--tx:#eaf3ed;--mut:#9bb0a3;--br:#243329;--soft:#1b2a21;--warn:#f59e0b}}
+:root[data-theme="dark"]{--bg:#0d1410;--card:#16211b;--tx:#eaf3ed;--mut:#9bb0a3;--br:#243329;--soft:#1b2a21;--warn:#f59e0b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+.w{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:22px}
+header img{height:34px}header a{color:var(--mut);font-size:14px;text-decoration:none}
+h1{font-size:30px;line-height:1.15;margin:8px 0 10px}p.lead{color:var(--mut);margin:0 0 18px;font-size:17px}
+.card{background:var(--card);border:1px solid var(--br);border-radius:16px;padding:18px;margin-bottom:16px}
+input{padding:12px;border:1px solid var(--br);border-radius:10px;background:var(--card);color:var(--tx);font:inherit;width:100%;min-width:0;margin-bottom:10px}
+.btn{display:inline-block;border:1px solid var(--br);background:var(--card);color:var(--tx);padding:11px 18px;border-radius:10px;font:600 15px inherit;cursor:pointer}
+.btn.p{background:var(--pr);border-color:var(--pr);color:#fff}.btn.p:hover{background:var(--pr2)}.btn:disabled{opacity:.6;cursor:default}
+.mut{color:var(--mut)}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 140px}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.plan{border:1px solid var(--br);border-radius:14px;padding:14px;background:var(--card)}.plan.on{border-color:var(--pr);background:var(--soft)}
+.plan b{font-size:22px;display:block}.plan small{color:var(--mut)}
+.bar{height:8px;border-radius:99px;background:var(--br);overflow:hidden;margin:8px 0}.bar i{display:block;height:100%;background:var(--pr)}
+.out{background:var(--soft);border-radius:12px;padding:12px;overflow-wrap:anywhere;font-weight:600;margin:10px 0}
+.err{color:var(--warn);font-weight:600;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:8px 4px;border-top:1px solid var(--br);overflow-wrap:anywhere}
+.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1}
+.hide{display:none}img.qr{width:210px;height:210px;display:block;margin:10px auto;background:#fff;padding:6px;border-radius:10px}
+</style>
+</head>
+<body>
+<div class="w">
+<header><img src="/logo.png" alt="NexTap"><a href="/">nextapbrasil.com.br</a></header>
+
+<div id="vLogin">
+  <h1>Link de avaliação do Google em 1 clique</h1>
+  <p class="lead">Cole o link do Google da empresa e receba o link direto das estrelas — pronto para gravar na placa NFC ou gerar QR Code.</p>
+  <div class="plans" style="margin-bottom:16px">
+    <div class="plan"><small>Grátis</small><b>R$ 0</b><small>até 10 empresas</small></div>
+    <div class="plan"><small>Até 50</small><b>R$ 9,90<span style="font-size:14px">/mês</span></b><small>até 50 empresas</small></div>
+    <div class="plan"><small>Ilimitado</small><b>R$ 19,90<span style="font-size:14px">/mês</span></b><small>sem limite</small></div>
+  </div>
+  <div class="card">
+    <div class="tabs"><button class="btn p" id="tbC" onclick="modo('c')">Criar conta grátis</button><button class="btn" id="tbE" onclick="modo('e')">Já tenho conta</button></div>
+    <input id="nm" placeholder="Seu nome" autocomplete="name">
+    <input id="em" type="email" placeholder="E-mail" autocomplete="email">
+    <input id="pw" type="password" placeholder="Senha (mínimo 6 caracteres)" autocomplete="current-password">
+    <div class="err" id="lerr"></div>
+    <button class="btn p" id="lbt" onclick="entrar()" style="width:100%">Criar conta e começar</button>
+    <p class="mut" style="font-size:13px;margin:10px 0 0">Revendedor NexTap? Use o mesmo e-mail e senha do seu painel.</p>
+  </div>
+</div>
+
+<div id="vApp" class="hide">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h1 style="font-size:24px;margin:0">Conversor de link</h1><button class="btn" onclick="sair()">Sair</button></div>
+  <div class="card" style="margin-top:14px">
+    <div id="uso"></div>
+    <input id="gu" inputmode="url" autocapitalize="off" placeholder="Cole o link do Google da empresa (share.google, Maps, g.page…)">
+    <div class="err" id="gerr"></div>
+    <button class="btn p" id="gbt" onclick="converter()" style="width:100%">⭐ Gerar link de avaliação</button>
+    <div id="gout"></div>
+  </div>
+  <div class="card" id="cPlanos"></div>
+  <div class="card hide" id="cPix"></div>
+  <div class="card"><h3 style="margin:0 0 6px">Seus links</h3><div id="lista" class="mut">Nenhum link ainda.</div></div>
+</div>
+</div>
+<script>
+var API='/api',TK='',M='c',POLL=null;
+function $(i){return document.getElementById(i)}
+function E(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function R(v){return 'R$ '+Number(v).toFixed(2).replace('.',',')}
+try{TK=localStorage.getItem('gl_tk')||''}catch(e){}
+async function api(p,o){o=o||{};var h={'Content-Type':'application/json'};if(TK)h.Authorization='Bearer '+TK;
+  var r=await fetch(API+p,{method:o.method||'GET',headers:h,body:o.body});var j={};try{j=await r.json()}catch(e){}
+  if(r.status===401&&TK){sair();throw new Error('Entre novamente.')}
+  if(!r.ok){var e=new Error(j.error||'Erro ('+r.status+')');e.data=j;throw e}return j}
+function modo(m){M=m;$('nm').style.display=m==='c'?'':'none';$('lbt').textContent=m==='c'?'Criar conta e começar':'Entrar';
+  $('tbC').className='btn'+(m==='c'?' p':'');$('tbE').className='btn'+(m==='e'?' p':'')}
+async function entrar(){
+  $('lerr').textContent='';var b={email:$('em').value.trim(),password:$('pw').value};
+  if(M==='c'){b.name=$('nm').value.trim();if(!b.name)return $('lerr').textContent='Informe seu nome.'}
+  $('lbt').disabled=true;
+  try{var r=await api('/auth/'+(M==='c'?'register':'login'),{method:'POST',body:JSON.stringify(b)});TK=r.token;try{localStorage.setItem('gl_tk',TK)}catch(e){}abrir()}
+  catch(e){$('lerr').textContent=e.message}finally{$('lbt').disabled=false}}
+function sair(){TK='';try{localStorage.removeItem('gl_tk')}catch(e){}clearInterval(POLL);$('vApp').className='hide';$('vLogin').className=''}
+async function abrir(){
+  try{var s=await api('/resellers/google-plano')}catch(e){return}
+  $('vLogin').className='hide';$('vApp').className='';pintar(s)}
+function pintar(s){
+  var pct=s.limite?Math.min(100,Math.round(s.usados*100/s.limite)):100;
+  $('uso').innerHTML='<b>Plano '+E(s.nome)+'</b>'+(s.ate?' <span class="mut">· ativo até '+E(s.ate.slice(0,10).split('-').reverse().join('/'))+'</span>':'')+(s.expirado?' <span class="err">· seu plano venceu</span>':'')
+   +'<div class="bar"><i style="width:'+pct+'%"></i></div><span class="mut">'+s.usados+(s.limite?' de '+s.limite:'')+' empresas usadas'+(s.limite?'':' (sem limite)')+'</span>';
+  $('cPlanos').innerHTML='<h3 style="margin:0 0 10px">Planos</h3><div class="plans">'+s.planos.map(function(p){
+    var on=s.plano===p.id;return '<div class="plan'+(on?' on':'')+'"><b>'+R(p.preco)+'<span style="font-size:14px">/mês</span></b><small>'+(p.limite?'até '+p.limite+' empresas':'empresas ilimitadas')+'</small><br>'
+     +'<button class="btn p" style="margin-top:10px;width:100%" onclick="assinar(\''+p.id+'\')">'+(on?'Renovar 30 dias':'Assinar')+' via Pix</button></div>'}).join('')+'</div><p class="mut" style="font-size:13px;margin:10px 0 0">Pagamento por Pix, 30 dias por vez. Os links já gerados continuam funcionando mesmo se o plano vencer.</p>';
+  var L=s.links||[];$('lista').innerHTML=L.length?'<table>'+L.map(function(l){return '<tr><td><b>'+E(l.nome||'Empresa')+'</b><br><a href="'+E(l.link)+'" target="_blank" rel="noopener" style="color:var(--pr)">'+E(l.link)+'</a></td><td style="width:70px"><button class="btn" onclick="cp(\''+E(l.link)+'\',this)">Copiar</button></td></tr>'}).join('')+'</table>':'Nenhum link ainda.'}
+async function recarregar(){pintar(await api('/resellers/google-plano'))}
+function cp(t,b){var ok=function(){var o=b.textContent;b.textContent='Copiado ✓';setTimeout(function(){b.textContent=o},1500)};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,function(){});else{var i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy');ok()}catch(e){}i.remove()}}
+async function converter(){
+  $('gerr').textContent='';$('gout').innerHTML='';$('gbt').disabled=true;$('gbt').textContent='Convertendo…';
+  try{var r=await api('/resellers/google-avaliacao',{method:'POST',body:JSON.stringify({url:$('gu').value.trim()})});
+    $('gout').innerHTML='<div class="out">'+(r.nome?E(r.nome)+'<br>':'')+E(r.link)+'</div><button class="btn p" onclick="cp(\''+E(r.link)+'\',this)">Copiar link de avaliação</button>';
+    $('gu').value='';recarregar()}
+  catch(e){$('gerr').textContent=e.message;if(e.data&&e.data.limite)$('cPlanos').scrollIntoView({behavior:'smooth'})}
+  finally{$('gbt').disabled=false;$('gbt').textContent='⭐ Gerar link de avaliação'}}
+async function assinar(p){
+  var c=$('cPix');c.className='card';c.innerHTML='Gerando Pix…';c.scrollIntoView({behavior:'smooth'});
+  try{var x=await api('/resellers/google-plano/assinar',{method:'POST',body:JSON.stringify({plano:p})});
+    c.innerHTML='<h3 style="margin:0">Pague '+R(x.valor)+' no Pix</h3><p class="mut" style="margin:4px 0">Abra o app do seu banco, escolha Pix e leia o QR Code ou use o copia-e-cola. O plano libera sozinho assim que o pagamento cair.</p>'
+     +(x.pix_qr_base64?'<img class="qr" alt="QR Code Pix" src="data:image/png;base64,'+E(x.pix_qr_base64)+'">':'')
+     +'<input id="pxc" readonly value="'+E(x.pix_qr_code)+'" onclick="this.select()"><button class="btn p" onclick="cp($(\'pxc\').value,this)" style="width:100%">Copiar código Pix</button><p class="mut" id="pxs" style="margin:10px 0 0">Aguardando pagamento…</p>';
+    clearInterval(POLL);var n=0;POLL=setInterval(async function(){n++;if(n>180){clearInterval(POLL);return}
+      try{var s=await api('/resellers/google-plano/pagamento/'+x.id);if(s.status==='pago'){clearInterval(POLL);$('pxs').innerHTML='<b style="color:var(--pr)">✓ Pagamento confirmado! Plano ativado.</b>';pintar(await api('/resellers/google-plano'))}
+        else if(s.status==='cancelado'){clearInterval(POLL);$('pxs').textContent='Pagamento cancelado. Gere um novo Pix.'}}catch(e){}},5000)}
+  catch(e){c.innerHTML='<div class="err">'+E(e.message)+'</div>'}}
+modo('c');if(TK)abrir();
+</script>
+</body>
+</html>

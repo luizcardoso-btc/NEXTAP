@@ -254,7 +254,8 @@ function qrUrl(p){return PUBLIC_BASE+'/r/'+p.code}
 function qrSvg(p){if(!window.qrcode)return '';var q=qrcode(0,'M');q.addData(qrUrl(p));q.make();var n=q.getModuleCount(),m=2,d='';for(var r=0;r<n;r++)for(var c=0;c<n;c++)if(q.isDark(r,c))d+='M'+(c+m)+' '+(r+m)+'h1v1h-1z';var z=n+2*m;return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+z+' '+z+'" shape-rendering="crispEdges"><rect width="'+z+'" height="'+z+'" fill="#fff"/><path d="'+d+'" fill="#000"/></svg>'}
 var TIPOS=['Google Avaliações','Instagram','Facebook','Site','Cardápio','Link personalizado'];
 var PH={'Google Avaliações':'https://g.page/r/sua-loja/review','Instagram':'https://instagram.com/seu_perfil','Facebook':'https://facebook.com/sua.pagina','Site':'https://www.seusite.com.br','Cardápio':'https://link-do-seu-cardapio.com','Link personalizado':'https://'};
-function phDest(){var i=$('f4');if(i)i.placeholder=PH[$('f3').value]||'https://'}
+function phDest(){var i=$('f4');if(i)i.placeholder=PH[$('f3').value]||'https://';var g=$('gconv');if(g)g.style.display=$('f3').value==='Google Avaliações'?'block':'none'}
+async function cvGoogle(){var i=$('f4'),m=$('gmsg');m.textContent='Convertendo…';try{var r=await api('/resellers/google-avaliacao',{method:'POST',body:JSON.stringify({url:i.value.trim()})});i.value=r.link;m.textContent='✓ Link de avaliação pronto'+(r.nome?' ('+r.nome+')':'')+'. Clique em Salvar.'}catch(e){m.textContent=e.message}}
 function vPlaca(){var p=getPl(selPl);if(!p){cur='placas';return vPlacas()}
 head('Placa '+E(pc(p)),'<a style="color:var(--pr);cursor:pointer" onclick="nav(\'placas\')">← Voltar para minhas placas</a>');
 var st=STATS[p.id]||{total:0,hoje:0,d7:0,d30:0,ultima:null},svg=qrSvg(p),tipos=TIPOS.slice();
@@ -268,6 +269,7 @@ var cfg='<div class="card"><div style="display:flex;justify-content:space-betwee
 +'<label>Nome / identificação da placa<input id="f2" value="'+E(p.plate_label)+'" placeholder="Ex.: Barbearia João - Balcão"></label>'
 +'<label>Tipo de destino<select id="f3" onchange="phDest()">'+tipos.map(function(t){return '<option'+(p.destination_type===t?' selected':'')+'>'+E(t)+'</option>'}).join('')+'</select></label>'
 +'<label>Link de destino<input id="f4" value="'+E(p.destination_url)+'" placeholder="https://" inputmode="url" autocapitalize="off"><small class="mut">Cole o link para onde o cliente vai ao aproximar o celular ou ler o QR Code.</small></label>'
++'<div id="gconv" style="display:'+(p.destination_type==='Google Avaliações'?'block':'none')+'"><button type="button" class="btn s" onclick="cvGoogle()">⭐ Converter em link de avaliação do Google</button> <small class="mut" id="gmsg">Cole o link do Google da empresa (share.google, Maps…) e clique.</small></div>'
 +'<div><button class="btn p" onclick="svPl('+p.id+')">Salvar alterações</button></div>'
 +'<small class="mut">A placa continua a mesma: o QR Code e o NFC não mudam quando você altera o destino.</small></div>'
 +'<hr style="border:0;border-top:1px solid var(--br);margin:18px 0 14px"><h3 style="margin-bottom:12px">Leituras da placa</h3>'
