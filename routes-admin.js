@@ -58,6 +58,29 @@ router.post('/contas-teste', async (req, res) => {
   res.json({ id: r.id, email: em, criada, placas, painel: base + '/revendedor/' });
 });
 
+// Serviço "Link de Avaliação do Google": assinantes, faturamento e uso.
+router.get('/google-servico', (req, res) => {
+  const gl = require('./google-plano.js');
+  const rs = db.prepare(`SELECT r.id, r.name, r.email, r.gl_plano, r.gl_ate, r.created_at,
+      (SELECT COUNT(*) FROM gl_links l WHERE l.reseller_id = r.id) AS links,
+      (SELECT COALESCE(SUM(valor),0) FROM gl_pagamentos p WHERE p.reseller_id = r.id AND p.status='pago') AS pago,
+      (SELECT COUNT(*) FROM gl_pagamentos p WHERE p.reseller_id = r.id AND p.status='pago') AS pagamentos,
+      (SELECT MAX(pago_em) FROM gl_pagamentos p WHERE p.reseller_id = r.id AND p.status='pago') AS ultimo_pagamento
+    FROM resellers r WHERE r.gl_plano IS NOT NULL OR EXISTS (SELECT 1 FROM gl_links l WHERE l.reseller_id = r.id)
+    ORDER BY (r.gl_ate IS NOT NULL) DESC, r.gl_ate DESC, links DESC`).all()
+    .map(x => { const e = gl.estado(x.id); return { ...x, plano_atual: e.plano, vigente: !!e.ate, limite: e.limite }; });
+  const q = sql => db.prepare(sql).get();
+  const mes = q("SELECT COALESCE(SUM(valor),0) AS s FROM gl_pagamentos WHERE status='pago' AND strftime('%Y-%m',pago_em)=strftime('%Y-%m','now')").s;
+  const total = q("SELECT COALESCE(SUM(valor),0) AS s FROM gl_pagamentos WHERE status='pago'").s;
+  const ativos = rs.filter(x => x.vigente);
+  const mrr = ativos.reduce((s, x) => s + (gl.PLANOS[x.plano_atual] ? gl.PLANOS[x.plano_atual].preco : 0), 0);
+  const vencendo = ativos.filter(x => x.gl_ate && x.gl_ate <= db.prepare("SELECT datetime('now','+7 days') AS d").get().d).length;
+  const contas = q('SELECT COUNT(DISTINCT reseller_id) AS n FROM gl_links').n;
+  const links = q('SELECT COUNT(*) AS n FROM gl_links').n;
+  const pendentes = q("SELECT COUNT(*) AS n FROM gl_pagamentos WHERE status='pendente' AND criado_em > datetime('now','-1 day')").n;
+  res.json({ resumo: { faturamento_mes: mes, faturamento_total: total, mrr, assinantes_ativos: ativos.length, vencendo_7d: vencendo, contas_usando: contas, links_gerados: links, pix_pendentes: pendentes }, assinantes: rs });
+});
+
 // Baixa uma cópia completa do banco (arquivo .db) — guarde no seu computador de vez em quando.
 router.get('/backup', (req, res) => {
   try {

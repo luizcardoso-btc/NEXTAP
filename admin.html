@@ -43,7 +43,7 @@ main{padding:24px;min-width:0}.top{display:flex;justify-content:space-between;ga
 
 <div id="app">
 <aside><a class="logo lgc" href="/" aria-label="NexTap"><img src="/logo.png" alt="NexTap" class="lg"></a><small style="margin-top:4px">PAINEL ADMIN · FORNECEDOR</small>
-<small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a>
+<small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a><a data-v="gl" onclick="nav('gl')">⭐ Link de Avaliação</a>
 <small>DOCUMENTOS</small><a data-v="decl" onclick="nav('decl')" style="background:#15803d;color:#fff;font-weight:700">🧾 Declaração e NF-e</a><a href="/admin/catalogo" style="font-weight:700">🛍 Catálogo de produtos</a>
 <small>GESTÃO</small><a data-v="fin" onclick="nav('fin')">💰 Financeiro</a><a data-v="forn" onclick="nav('forn')">🏭 Fornecedores</a><a data-v="cfg" onclick="nav('cfg')">⚙ Preços</a><a data-v="dados" onclick="nav('dados')">🛡 Dados e backups</a>
 <div class="me"><div class="av">A</div><div><b>Admin</b><div class="mut" style="color:#7d8c86">Fornecedor</div></div><button class="btn s" style="margin-left:auto" onclick="out()" title="Sair">⎋</button></div></aside>
@@ -86,11 +86,11 @@ OVER=r[0];REVS=r[1];ORDERS=r[2];PLATES=r[3];TIERS=r[4]}
 function inP(x){var d=U(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias'],['month','Este mês'],['all','Tudo']].map(function(p){return '<button class="pill '+(per===p[0]?'on':'')+'" onclick="per=\''+p[0]+'\';draw()">'+p[1]+'</button>'}).join('')+'</div>'}
 function head(t,s){$('hd').innerHTML='<h2>'+t+'</h2><span class="mut">'+s+'</span>'}
-function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
+function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='gl')loadGl();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
 function mo(h){$('mb').innerHTML=h;$('mo').style.display='grid'}function cl(){$('mo').style.display='none'}
 $('mo').onclick=function(e){if(e.target===this)cl()};
 function draw(){var aviso=(OVER&&OVER.persistente===false)?'<div class="card" style="border-color:#dc2626;margin-bottom:12px"><b style="color:#dc2626">⚠ Atenção: os dados não estão sendo guardados de forma permanente.</b><br><span class="mut">No Railway, crie um Volume (montado em /data) e conecte ao serviço. Até lá, cadastros e pedidos são apagados a cada atualização do sistema.</span></div>':'';
-$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
+$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,gl:vGl,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
 async function baixarBackup(){
   try{
     var r=await fetch(API_BASE+'/admin/backup',{headers:{Authorization:'Bearer '+TOKEN}});
@@ -312,6 +312,15 @@ async function salvarSenha(id){var p=$('nsp').value;try{await api('/admin/resell
 function abrirTeste(){mo('<h3 style="margin:0">Criar conta de teste</h3><p class="mut" style="margin:0">Cria a conta (ou troca a senha se o e-mail já existir) com placas de teste prontas para gravar no NFC / QR.</p><input id="te" placeholder="E-mail da conta de teste" value="teste@nextapbrasil.com.br"><input id="ts" value="'+senhaAleatoria()+'"><input id="tq" type="number" min="1" max="50" value="6"><div class="row"><button class="btn p" onclick="criarTeste()">Criar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
 async function criarTeste(){try{var r=await api('/admin/contas-teste',{method:'POST',body:JSON.stringify({email:$('te').value,senha:$('ts').value,placas:+$('tq').value})});var s=$('ts').value;
 mo('<h3 style="margin:0">Conta de teste '+(r.criada?'criada':'atualizada')+' ✓</h3><p class="mut" style="margin:0;overflow-wrap:anywhere">Painel: '+E(r.painel)+'<br>E-mail: <b style="color:var(--tx)">'+E(r.email)+'</b><br>Senha: <b style="color:var(--tx)">'+E(s)+'</b></p><p class="mut" style="margin:0">Grave cada link no NFC / gere o QR (o destino é configurado no painel da conta):</p><div style="max-height:260px;overflow:auto;font-size:13px;overflow-wrap:anywhere">'+r.placas.map(function(p){return '<div><b>'+E(p.tracking_code)+'</b> ('+p.cor+') '+E(p.url)+'</div>'}).join('')+'</div><div class="row"><button class="btn" onclick="cl()">Fechar</button></div>');try{await loadAll();draw()}catch(e){}}catch(e){alert(e.message)}}
+var GL=null;
+async function loadGl(){try{GL=await api('/admin/google-servico')}catch(e){GL=GL||{erro:e.message}}if(cur==='gl')draw()}
+function vGl(){head('Link de Avaliação do Google','Serviço vendido por fora: assinantes, faturamento e uso.');
+if(!GL)return '<div class="card mut">Carregando…</div>';if(GL.erro)return '<div class="card">'+E(GL.erro)+'</div>';
+var r=GL.resumo,dt=function(s){return s?String(s).slice(0,10).split('-').reverse().join('/'):'—'},NM={gratis:'Grátis',p50:'Até 50',ilimitado:'Ilimitado'};
+var k='<div class="k"><div><small>Faturamento no mês</small><b>'+R(r.faturamento_mes)+'</b></div><div><small>Faturamento total</small><b>'+R(r.faturamento_total)+'</b></div><div><small>Receita mensal recorrente</small><b>'+R(r.mrr)+'</b></div><div><small>Assinantes ativos</small><b>'+r.assinantes_ativos+'</b></div><div><small>Vencem em 7 dias</small><b>'+r.vencendo_7d+'</b></div><div><small>Contas usando</small><b>'+r.contas_usando+'</b></div><div><small>Links gerados</small><b>'+r.links_gerados+'</b></div><div><small>Pix aguardando</small><b>'+r.pix_pendentes+'</b></div></div>';
+var t='<div class="card"><div class="tw"><table><tr><th>Nome</th><th>E-mail</th><th>Plano</th><th>Vence em</th><th>Links</th><th>Pagamentos</th><th>Total pago</th><th>Último pgto</th></tr>'+(GL.assinantes.length?GL.assinantes.map(function(x){var st=x.vigente?'<b style="color:#15803d">'+NM[x.plano_atual]+'</b>':(x.gl_plano?'<span style="color:#dc2626">Vencido ('+NM[x.gl_plano]+')</span>':'Grátis');
+return '<tr><td>'+E(x.name)+'</td><td>'+E(x.email)+'</td><td>'+st+'</td><td>'+dt(x.vigente?x.gl_ate:x.gl_ate)+'</td><td>'+x.links+(x.limite?' / '+x.limite:'')+'</td><td>'+x.pagamentos+'</td><td>'+R(x.pago)+'</td><td>'+dt(x.ultimo_pagamento)+'</td></tr>'}).join(''):'<tr><td colspan="8" class="mut">Ainda não há usuários do serviço.</td></tr>')+'</table></div></div>';
+return k+t}
 var SIS=null;
 var EVT=[];
 async function loadSis(){try{SIS=await api('/admin/sistema');EVT=await api('/admin/payment-events')}catch(e){if(!SIS)SIS=null}if(cur==='dados')draw()}
