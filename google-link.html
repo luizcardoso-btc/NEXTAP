@@ -55,7 +55,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td{padding:8px 4px;bord
 </div>
 
 <div id="vApp" class="hide">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h1 style="font-size:24px;margin:0">Conversor de links</h1><button class="btn" onclick="sair()">Sair</button></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h1 style="font-size:24px;margin:0">Conversor de links</h1><span class="row" style="flex:0 0 auto"><a class="btn" href="/revendedor/" style="text-decoration:none">← Meu painel</a><button class="btn" onclick="sair()">Sair</button></span></div>
   <div class="card" style="margin-top:14px">
     <div id="uso"></div>
     <div class="chips" id="chips"></div>
@@ -74,7 +74,7 @@ var API='/api',TK='',M='c',POLL=null;
 function $(i){return document.getElementById(i)}
 function E(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function R(v){return 'R$ '+Number(v).toFixed(2).replace('.',',')}
-try{TK=localStorage.getItem('gl_tk')||''}catch(e){}
+try{TK=localStorage.getItem('gl_tk')||localStorage.getItem('nx_token')||sessionStorage.getItem('nx_token')||''}catch(e){} // já entra com a sessão do painel do revendedor
 async function api(p,o){o=o||{};var h={'Content-Type':'application/json'};if(TK)h.Authorization='Bearer '+TK;
   var r=await fetch(API+p,{method:o.method||'GET',headers:h,body:o.body});var j={};try{j=await r.json()}catch(e){}
   if(r.status===401&&TK){sair();throw new Error('Entre novamente.')}
@@ -87,7 +87,7 @@ async function entrar(){
   $('lbt').disabled=true;
   try{var r=await api('/auth/'+(M==='c'?'register':'login'),{method:'POST',body:JSON.stringify(b)});TK=r.token;try{localStorage.setItem('gl_tk',TK)}catch(e){}abrir()}
   catch(e){$('lerr').textContent=e.message}finally{$('lbt').disabled=false}}
-function sair(){TK='';try{localStorage.removeItem('gl_tk')}catch(e){}clearInterval(POLL);$('vApp').className='hide';$('vLogin').className=''}
+function sair(){TK='';try{localStorage.removeItem('gl_tk');localStorage.removeItem('nx_token');sessionStorage.removeItem('nx_token')}catch(e){}clearInterval(POLL);$('vApp').className='hide';$('vLogin').className=''}
 async function abrir(){
   try{var s=await api('/resellers/google-plano')}catch(e){return}
   $('vLogin').className='hide';$('vApp').className='';pintar(s)}
