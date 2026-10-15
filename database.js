@@ -380,6 +380,21 @@ CREATE TABLE IF NOT EXISTS sales (
     );
     INSERT OR IGNORE INTO settings (chave, valor) VALUES ('biosite_preco', '25.00');
   `),
+  // v15 — estoque de QR codes pré-numerados (lotes por cor enviados ao fornecedor; as vendas consomem em ordem). Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS qr_lotes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, criado_em TEXT NOT NULL DEFAULT (datetime('now')), qtd_azul INTEGER NOT NULL DEFAULT 0, qtd_preta INTEGER NOT NULL DEFAULT 0,
+      origem TEXT NOT NULL DEFAULT 'manual', observacao TEXT, baixado_em TEXT, enviado_em TEXT
+    );
+    CREATE TABLE IF NOT EXISTS qr_estoque (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT NOT NULL UNIQUE, code TEXT NOT NULL UNIQUE, cor TEXT NOT NULL, lote_id INTEGER NOT NULL REFERENCES qr_lotes(id),
+      status TEXT NOT NULL DEFAULT 'livre', plate_id INTEGER, usado_em TEXT, criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_qr_livres ON qr_estoque(status, cor, id);
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('qr_minimo', '20');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('qr_lote_auto', '50');
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('qr_auto', '1');
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

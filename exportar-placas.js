@@ -61,23 +61,31 @@ function pdf(placas, titulo) {
   });
 }
 
+const arq = n => String(n).replace('#', '');
+// Monta o ZIP do fornecedor (CSV + PDF + SVG por placa). placas: [{numero,url,cor,pedido,data}]
+async function montarZip(placas, { titulo, intro }) {
+  const csv = '\uFEFF' + ['numero;cor;pedido;data;link_qr_dinamico'].concat(placas.map(p => [p.numero, p.cor, p.pedido || '', p.data || '', p.url].join(';'))).join('\r\n') + '\r\n';
+  const leia = `NexTap — arquivo para o fornecedor\r\n\r\n${intro}\r\nPlacas: ${placas[0].numero} a ${placas[placas.length - 1].numero} (${placas.length} placas)\r\n- placas.csv: numeração, cor e link de cada placa (abre no Excel)\r\n- placas-qr.pdf: QR Code + número de cada placa, 20 por página (vetorial)\r\n- svg/: um QR Code vetorial por placa, nomeado pelo número (ex.: 00001.svg)\r\n\r\nO QR é dinâmico: leva ao link fixo da placa e o destino é trocado no painel, sem regravar nada.\r\nGerado em ${new Date().toISOString().slice(0, 10)}.\r\n`;
+  const lista = [{ nome: 'placas.csv', dados: Buffer.from(csv, 'utf8') }, { nome: 'placas-qr.pdf', dados: await pdf(placas, titulo) }, { nome: 'LEIA-ME.txt', dados: Buffer.from(leia, 'utf8') }]
+    .concat(placas.map(p => ({ nome: `svg/${arq(p.numero)}.svg`, dados: Buffer.from(svg(p.url, p.numero), 'utf8') })));
+  return zip(lista);
+}
+const baseUrl = req => (process.env.SITE_HOST ? 'https://' + process.env.SITE_HOST.replace(/^https?:\/\//, '') : `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+const enviarZip = (res, z, nome) => res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${nome}"`, 'Content-Length': z.length }).send(z);
+
 const router = express.Router();
 router.get('/api/admin/placas/exportar', requireAdmin, async (req, res) => {
   try {
     const qtd = Math.max(1, Math.min(1000, parseInt(req.query.qtd, 10) || 100));
-    const base = (process.env.SITE_HOST ? 'https://' + process.env.SITE_HOST.replace(/^https?:\/\//, '') : `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const base = baseUrl(req);
     const linhas = db.prepare(`SELECT p.id, p.tracking_code, p.code, p.color, p.order_id, o.paid_at, o.created_at
       FROM plates p JOIN orders o ON o.id = p.order_id WHERE p.order_id IS NOT NULL ORDER BY p.id DESC LIMIT ?`).all(qtd).reverse();
     if (!linhas.length) return res.status(404).json({ error: 'Ainda não há placas vendidas para exportar.' });
     const placas = linhas.map(l => ({ numero: l.tracking_code || '#' + String(l.id).padStart(5, '0'), url: `${base}/r/${l.code}`, cor: l.color, pedido: l.order_id, data: (l.paid_at || l.created_at || '').slice(0, 10) }));
-    const arq = n => n.replace('#', '');
-    const csv = '﻿' + ['numero;cor;pedido;data_venda;link_qr_dinamico'].concat(placas.map(p => [p.numero, p.cor, p.pedido, p.data, p.url].join(';'))).join('\r\n') + '\r\n';
-    const lista = [{ nome: 'placas.csv', dados: Buffer.from(csv, 'utf8') }, { nome: 'placas-qr.pdf', dados: await pdf(placas, `NexTap — QR e numeração das últimas ${placas.length} placas`) },
-      { nome: 'LEIA-ME.txt', dados: Buffer.from(`NexTap — arquivo para o fornecedor\r\n\r\nPlacas: ${placas[0].numero} a ${placas[placas.length - 1].numero} (${placas.length} placas)\r\n- placas.csv: numeração, cor e link de cada placa (abre no Excel)\r\n- placas-qr.pdf: QR Code + número de cada placa, 20 por página (vetorial)\r\n- svg/: um QR Code vetorial por placa, nomeado pelo número (ex.: 00001.svg)\r\n\r\nO QR é dinâmico: leva ao link fixo da placa e o destino é trocado no painel, sem regravar nada.\r\nGerado em ${new Date().toISOString().slice(0, 10)}.\r\n`, 'utf8') }]
-      .concat(placas.map(p => ({ nome: `svg/${arq(p.numero)}.svg`, dados: Buffer.from(svg(p.url, p.numero), 'utf8') })));
-    const z = zip(lista);
-    res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="nextap-placas-${arq(placas[0].numero)}-a-${arq(placas[placas.length - 1].numero)}.zip"`, 'Content-Length': z.length }).send(z);
+    const z = await montarZip(placas, { titulo: `NexTap — QR e numeração das últimas ${placas.length} placas`, intro: 'Últimas placas vendidas no sistema.' });
+    enviarZip(res, z, `nextap-placas-${arq(placas[0].numero)}-a-${arq(placas[placas.length - 1].numero)}.zip`);
   } catch (e) { console.error('[EXPORTAR] falha:', e); res.status(500).json({ error: 'Não consegui gerar o arquivo agora.' }); }
 });
 
+router.montarZip = montarZip; router.enviarZip = enviarZip; router.baseUrl = baseUrl; router.arq = arq;
 module.exports = router;
