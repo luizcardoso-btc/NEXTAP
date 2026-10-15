@@ -19,22 +19,22 @@ function estado(resellerId) {
 }
 
 // Registra o negócio convertido. Converter de novo o mesmo negócio não gasta cota. Lança erro com .status = 402 no limite.
-function registrar(resellerId, { chave, link, nome }) {
+function registrar(resellerId, { chave, link, nome, tipo = 'google' }) {
   const ja = db.prepare('SELECT id FROM gl_links WHERE reseller_id = ? AND place_key = ?').get(resellerId, chave);
   if (!ja) {
     const e = estado(resellerId);
     if (e.limite !== null && e.usados >= e.limite) {
       const err = new Error(e.plano === 'gratis'
-        ? `Você usou os ${e.limite} links grátis. Assine por R$ 9,90/mês (até 50) ou R$ 19,90/mês (ilimitado) para gerar mais.`
+        ? `Você usou os ${e.limite} links grátis. Assine por R$ 9,90/mês (até 50 links) ou R$ 19,90/mês (ilimitado) para gerar mais.`
         : `Você chegou a ${e.limite} links do plano ${e.nome}. Passe para o Ilimitado (R$ 19,90/mês) para gerar mais.`);
       err.status = 402; err.estado = e; throw err;
     }
-    db.prepare('INSERT INTO gl_links (reseller_id, place_key, link, nome) VALUES (?, ?, ?, ?)').run(resellerId, chave, link, nome || null);
+    db.prepare('INSERT INTO gl_links (reseller_id, place_key, link, nome, tipo) VALUES (?, ?, ?, ?, ?)').run(resellerId, chave, link, nome || null, tipo);
   }
   return estado(resellerId);
 }
 
-const listarLinks = id => db.prepare('SELECT link, nome, created_at FROM gl_links WHERE reseller_id = ? ORDER BY id DESC LIMIT 200').all(id);
+const listarLinks = id => db.prepare('SELECT link, nome, tipo, created_at FROM gl_links WHERE reseller_id = ? ORDER BY id DESC LIMIT 200').all(id);
 
 async function mp(path, opts = {}, fetchFn = fetch) {
   const r = await fetchFn((process.env.MP_API_BASE || 'https://api.mercadopago.com') + path, { ...opts, headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, 'Content-Type': 'application/json', ...(opts.headers || {}) }, signal: AbortSignal.timeout(15000) });

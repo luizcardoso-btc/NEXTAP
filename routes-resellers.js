@@ -16,6 +16,30 @@ router.post('/google-avaliacao', async (req, res) => {
   try { res.json({ ...r, plano: gl.registrar(req.resellerId, r) }); }
   catch (e) { res.status(e.status || 500).json({ error: e.message, limite: true, plano: e.estado }); }
 });
+// Conversor de links: whatsapp | instagram | facebook | pix (o Google tem rota própria acima).
+router.post('/conversor', (req, res) => {
+  const gl = require('./google-plano.js'), cv = require('./conversor-links.js');
+  const b = req.body || {}, tipo = String(b.tipo || '');
+  const base = (process.env.SITE_HOST ? 'https://' + process.env.SITE_HOST.replace(/^https?:\/\//, '') : `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  try {
+    let r;
+    if (tipo === 'whatsapp') r = cv.whatsapp({ numero: b.numero, mensagem: b.mensagem });
+    else if (tipo === 'instagram') r = cv.instagram(b.perfil);
+    else if (tipo === 'facebook') r = cv.facebook(b.pagina);
+    else if (tipo === 'pix') {
+      const p = cv.pix(b);
+      let row = db.prepare('SELECT code FROM gl_pix WHERE reseller_id = ? AND uniq = ?').get(req.resellerId, p.chaveUnica);
+      const code = row ? row.code : nanoid(8);
+      r = { link: `${base}/pix/${code}`, chave: p.chaveUnica, nome: `Pix ${p.nome}`, tipo_chave: p.tipo, payload: p.payload };
+      const plano = gl.registrar(req.resellerId, { ...r, tipo });
+      if (!row) db.prepare('INSERT INTO gl_pix (code, reseller_id, uniq, tipo_chave, chave, nome, cidade, valor, descricao, payload) VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .run(code, req.resellerId, p.chaveUnica, p.tipo, p.chave, p.nome, p.cidade, p.valor, p.descricao, p.payload);
+      return res.json({ ...r, plano });
+    } else return res.status(400).json({ error: 'Tipo de link inválido.' });
+    res.json({ ...r, plano: gl.registrar(req.resellerId, { ...r, tipo }) });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message, limite: e.status === 402, plano: e.estado }); }
+});
+
 router.get('/google-plano', (req, res) => { const gl = require('./google-plano.js'); res.json({ ...gl.estado(req.resellerId), links: gl.listarLinks(req.resellerId) }); });
 router.post('/google-plano/assinar', async (req, res) => {
   try { res.json(await require('./google-plano.js').criarPix(req, req.resellerId, String((req.body || {}).plano || ''))); }

@@ -350,6 +350,16 @@ CREATE TABLE IF NOT EXISTS sales (
       criado_em TEXT NOT NULL DEFAULT (datetime('now')), pago_em TEXT
     );
   `),
+  // v13 — conversor de links (WhatsApp, Instagram, Facebook, Pix): tipo do link e chaves Pix cadastradas. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE gl_links ADD COLUMN tipo TEXT NOT NULL DEFAULT 'google';
+    CREATE TABLE IF NOT EXISTS gl_pix (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+      uniq TEXT NOT NULL, tipo_chave TEXT, chave TEXT NOT NULL, nome TEXT NOT NULL, cidade TEXT NOT NULL,
+      valor REAL, descricao TEXT, payload TEXT NOT NULL, criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (reseller_id, uniq)
+    );
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
