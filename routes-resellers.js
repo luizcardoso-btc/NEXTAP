@@ -9,8 +9,21 @@ router.use(requireReseller);
 
 // Converte um link do Google (share.google, Maps, g.page) no link direto de avaliação.
 router.post('/google-avaliacao', async (req, res) => {
-  try { res.json(await require('./google-avaliacao.js').converter((req.body || {}).url)); }
-  catch (e) { res.status(422).json({ error: e.message || 'Não consegui converter este link.' }); }
+  const gl = require('./google-plano.js');
+  let r;
+  try { r = await require('./google-avaliacao.js').converter((req.body || {}).url); }
+  catch (e) { return res.status(422).json({ error: e.message || 'Não consegui converter este link.' }); }
+  try { res.json({ ...r, plano: gl.registrar(req.resellerId, r) }); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message, limite: true, plano: e.estado }); }
+});
+router.get('/google-plano', (req, res) => { const gl = require('./google-plano.js'); res.json({ ...gl.estado(req.resellerId), links: gl.listarLinks(req.resellerId) }); });
+router.post('/google-plano/assinar', async (req, res) => {
+  try { res.json(await require('./google-plano.js').criarPix(req, req.resellerId, String((req.body || {}).plano || ''))); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+router.get('/google-plano/pagamento/:id', async (req, res) => {
+  const r = await require('./google-plano.js').conferir(req.resellerId, Number(req.params.id));
+  r ? res.json(r) : res.status(404).json({ error: 'Pagamento não encontrado.' });
 });
 
 // Dados do próprio revendedor logado

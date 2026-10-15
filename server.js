@@ -72,6 +72,7 @@ const page = f => (req, res) => res.sendFile(path.join(__dirname, f));
 app.get('/', page('site.html'));
 app.get(['/revendedor', '/revendedor/'], page('revendedor.html'));
 app.get(['/admin', '/admin/'], page('admin.html'));
+app.get(['/avaliacao', '/avaliacao/'], page('google-link.html'));
 
 // 404 e erro genérico em JSON (evita devolver stack trace e HTML para o frontend)
 app.use((req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));

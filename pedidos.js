@@ -116,6 +116,7 @@ function cancelarPendente(orderId, origem, detalhe) {
 // ---------- notificação do Mercado Pago (webhook) ----------
 async function processarNotificacao(paymentId) {
   const pay = await buscarPagamento(paymentId);
+  if (String(pay.external_reference || '').startsWith('GL-')) return require('./google-plano.js').aplicarPagamento(pay); // assinatura do Link de Avaliação
   const orderId = Number(pay.external_reference);
   const order = orderId ? db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) : null;
   if (!order) {

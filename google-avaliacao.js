@@ -3,6 +3,9 @@ const HOSTS = /(^|\.)(google\.[a-z.]+|goo\.gl|g\.page|share\.google|maps\.app\.g
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36';
 const linkAvaliacao = id => `https://search.google.com/local/writereview?placeid=${id}`;
 
+// Identifica o negócio (para contar 1 vez por negócio): Place ID ou o próprio link.
+const chaveDe = l => ((l.match(/placeid=(ChIJ[\w-]+)/i) || [])[1]) || l.toLowerCase().replace(/[?#].*$/, '').replace(/\/$/, '');
+
 function hostOk(u) { try { const x = new URL(u); return x.protocol === 'https:' && HOSTS.test(x.hostname); } catch (e) { return false; } }
 
 // Já é link de avaliação / tem o Place ID na própria URL?
@@ -55,14 +58,14 @@ async function placeIdPorNome(info, fetchFn = fetch) {
 async function converter(entrada, fetchFn = fetch) {
   const u = String(entrada || '').trim();
   if (!/^https?:\/\//i.test(u)) throw new Error('Cole o link completo, começando com https://');
-  const d = direto(u); if (d) return { link: d, origem: 'ja_era_avaliacao' };
+  const d = direto(u); if (d) return { link: d, origem: 'ja_era_avaliacao', chave: chaveDe(d) };
   const r = await buscar(u.replace(/^http:/i, 'https:'), fetchFn);
-  if (r.direto) return { link: r.direto, origem: 'redirecionamento' };
-  const d2 = direto(r.final); if (d2) return { link: d2, origem: 'redirecionamento' };
+  if (r.direto) return { link: r.direto, origem: 'redirecionamento', chave: chaveDe(r.direto) };
+  const d2 = direto(r.final); if (d2) return { link: d2, origem: 'redirecionamento', chave: chaveDe(d2) };
   const info = extrair(r.final, r.html);
-  if (info.placeId) return { link: linkAvaliacao(info.placeId), origem: 'pagina', nome: info.nome };
+  if (info.placeId) return { link: linkAvaliacao(info.placeId), origem: 'pagina', nome: info.nome, chave: info.placeId };
   const id = await placeIdPorNome(info, fetchFn);
-  if (id) return { link: linkAvaliacao(id), origem: 'places_api', nome: info.nome };
+  if (id) return { link: linkAvaliacao(id), origem: 'places_api', nome: info.nome, chave: id };
   throw new Error(process.env.GOOGLE_PLACES_API_KEY
     ? 'Não consegui identificar essa empresa. Use o link "Pedir avaliações" do Perfil da Empresa (g.page/r/…/review).'
     : 'Não consegui converter automaticamente. Use o link "Pedir avaliações" do Perfil da Empresa (g.page/r/…/review) ou peça ao suporte para ativar a conversão automática.');
