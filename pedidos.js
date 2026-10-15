@@ -37,6 +37,25 @@ function gerarPlacas(orderId) {
   for (let i = 0; i < order.qty_preta; i++) criar('preta');
 }
 
+// Placas de teste (sem pedido): para o fornecedor testar NFC/QR e a configuração no painel.
+function criarPlacasTeste(resellerId, quantidade) {
+  const n = Math.max(1, Math.min(50, parseInt(quantidade, 10) || 1));
+  const insert = db.prepare(`INSERT INTO plates (reseller_id, order_id, code, color, status, cost, plate_label) VALUES (?, NULL, ?, ?, 'estoque', 0, 'Placa de teste')`);
+  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ?');
+  const grava = db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?');
+  const novo = id => { let k = id, c; do { c = '#' + String(k).padStart(5, '0'); k++; } while (existe.get(c)); return c; };
+  return db.transaction(() => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const cor = i % 2 ? 'preta' : 'azul', code = nanoid(10);
+      const r = insert.run(resellerId, code, cor);
+      const tc = novo(Number(r.lastInsertRowid)); grava.run(tc, r.lastInsertRowid);
+      out.push({ id: Number(r.lastInsertRowid), tracking_code: tc, code, cor });
+    }
+    return out;
+  })();
+}
+
 // Marca como pago UMA vez (repetir não duplica placas). Devolve true se mudou algo.
 function marcarPago(orderId, { paymentId = null, manual = false, nota = null } = {}) {
   return db.transaction(() => {
@@ -228,4 +247,4 @@ async function atualizarTaxas(limite = 80) {
   return r;
 }
 
-module.exports = { atualizarTaxas, decorar, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
+module.exports = { atualizarTaxas, decorar, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };

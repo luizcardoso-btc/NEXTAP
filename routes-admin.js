@@ -16,7 +16,7 @@ router.get('/overview', (req, res) => {
   const revendedores = db.prepare('SELECT COUNT(*) AS n FROM resellers').get().n;
   const faturamento = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().s;
   const pendentes = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='aguardando_pagamento'").get().n;
-  const placas = db.prepare('SELECT COUNT(*) AS n FROM plates').get().n;
+  const placas = db.prepare('SELECT COUNT(*) AS n FROM plates WHERE order_id IS NOT NULL').get().n;
   const ativas = db.prepare("SELECT COUNT(*) AS n FROM plates WHERE status='ativa'").get().n;
   const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status='aguardando_pagamento'").get().s;
   const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().n;
@@ -28,7 +28,34 @@ router.get('/overview', (req, res) => {
 router.post('/resellers/:id/reset-link', (req, res) => {
   const r = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
   if (!r) return res.status(404).json({ error: 'Revendedor não encontrado.' });
-  res.json({ link: senha.criarLink(req, r.id, 24), nome: r.name });
+  const link = senha.criarLink(req, r.id, 24);
+  res.json({ link, token: link.split('?reset=')[1], nome: r.name });
+});
+
+// Define a senha direto (sem e-mail nem link): o fornecedor passa a nova senha ao revendedor.
+router.post('/resellers/:id/definir-senha', async (req, res) => {
+  const r = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Revendedor não encontrado.' });
+  const pw = String((req.body || {}).senha || '');
+  if (pw.length < 6) return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
+  db.prepare('UPDATE resellers SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(pw, 10), r.id);
+  senha.consumir(r.id);
+  res.json({ ok: true, nome: r.name });
+});
+
+// Conta de teste: cria (ou atualiza a senha de) uma conta com placas de teste já prontas para NFC/QR.
+router.post('/contas-teste', async (req, res) => {
+  const b = req.body || {};
+  const em = String(b.email || '').toLowerCase().trim(), pw = String(b.senha || '');
+  if (!/^\S+@\S+\.\S+$/.test(em)) return res.status(400).json({ error: 'Informe um e-mail válido.' });
+  if (pw.length < 6) return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres.' });
+  const hash = await bcrypt.hash(pw, 10);
+  let r = db.prepare('SELECT id FROM resellers WHERE lower(email) = ?').get(em), criada = false;
+  if (r) db.prepare('UPDATE resellers SET password_hash = ? WHERE id = ?').run(hash, r.id);
+  else { r = { id: Number(db.prepare('INSERT INTO resellers (name, email, whatsapp, password_hash) VALUES (?, ?, ?, ?)').run('Conta de teste NexTap', em, '', hash).lastInsertRowid) }; criada = true; }
+  const base = (process.env.SITE_HOST ? 'https://' + process.env.SITE_HOST.replace(/^https?:\/\//, '') : `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const placas = pedidos.criarPlacasTeste(r.id, b.placas || 6).map(p => ({ ...p, url: `${base}/r/${p.code}` }));
+  res.json({ id: r.id, email: em, criada, placas, painel: base + '/revendedor/' });
 });
 
 // Baixa uma cópia completa do banco (arquivo .db) — guarde no seu computador de vez em quando.
@@ -104,7 +131,7 @@ router.post('/resellers', async (req, res) => {
   const { name, email, whatsapp } = req.body || {};
   const em = String(email || '').toLowerCase().trim();
   if (!String(name || '').trim() || !em.includes('@')) return res.status(400).json({ error: 'Informe nome e e-mail válidos.' });
-  if (db.prepare('SELECT 1 FROM resellers WHERE email = ?').get(em)) return res.status(409).json({ error: 'Já existe um revendedor com esse e-mail.' });
+  if (db.prepare('SELECT 1 FROM resellers WHERE lower(email) = ?').get(em)) return res.status(409).json({ error: 'Já existe um revendedor com esse e-mail.' });
   const hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10); // senha aleatória; ele define a dele pelo link
   const info = db.prepare('INSERT INTO resellers (name, email, whatsapp, password_hash) VALUES (?, ?, ?, ?)')
     .run(String(name).trim().slice(0, 120), em, String(whatsapp || '').trim().slice(0, 30), hash);
