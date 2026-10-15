@@ -360,6 +360,26 @@ CREATE TABLE IF NOT EXISTS sales (
       UNIQUE (reseller_id, uniq)
     );
   `),
+  // v14 — Biosite (página de links do cliente final, vendida pelo revendedor): sites, visitas e pagamentos de publicação. Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS biosites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, reseller_id INTEGER NOT NULL REFERENCES resellers(id), slug TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'rascunho', titulo TEXT NOT NULL, bio TEXT NOT NULL DEFAULT '', tema TEXT NOT NULL DEFAULT 'claro',
+      cor TEXT NOT NULL DEFAULT '#15803d', foto TEXT, links TEXT NOT NULL DEFAULT '[]', cliente_nome TEXT, preco_venda REAL, custo_pago REAL,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), atualizado_em TEXT, publicado_em TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_biosites_reseller ON biosites(reseller_id);
+    CREATE TABLE IF NOT EXISTS biosite_views (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, biosite_id INTEGER NOT NULL REFERENCES biosites(id), at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_bsviews ON biosite_views(biosite_id, at);
+    CREATE TABLE IF NOT EXISTS biosite_pagamentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, biosite_id INTEGER NOT NULL REFERENCES biosites(id), reseller_id INTEGER NOT NULL REFERENCES resellers(id),
+      valor REAL NOT NULL, status TEXT NOT NULL DEFAULT 'pendente', mp_payment_id TEXT UNIQUE, pix_qr_code TEXT, pix_qr_base64 TEXT,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), pago_em TEXT
+    );
+    INSERT OR IGNORE INTO settings (chave, valor) VALUES ('biosite_preco', '25.00');
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

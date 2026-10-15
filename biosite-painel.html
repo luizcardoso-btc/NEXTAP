@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Biosites — NexTap</title>
+<link rel="icon" href="/favicon.png">
+<style>
+:root{--bg:#f0f5f1;--card:#fff;--tx:#0f1a13;--mut:#5b6b60;--br:#dfe8e2;--pr:#15803d;--pr2:#0f6a31;--soft:#e4f0e8;--warn:#b45309}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1410;--card:#16211b;--tx:#eaf3ed;--mut:#9bb0a3;--br:#243329;--soft:#1b2a21;--warn:#f59e0b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.45}
+.w{max-width:1080px;margin:0 auto;padding:18px 16px 60px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}header img{height:32px}
+h1{font-size:25px;margin:0}h3{margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--br);border-radius:16px;padding:16px;margin-bottom:14px}
+input,select,textarea{padding:11px;border:1px solid var(--br);border-radius:10px;background:var(--card);color:var(--tx);font:inherit;width:100%;min-width:0;margin-bottom:9px}
+textarea{resize:vertical;min-height:70px}label.l{display:block;font-size:13px;color:var(--mut);margin:2px 0 4px}
+.btn{display:inline-block;border:1px solid var(--br);background:var(--card);color:var(--tx);padding:10px 16px;border-radius:10px;font:600 14px inherit;cursor:pointer;text-decoration:none}
+.btn.p{background:var(--pr);border-color:var(--pr);color:#fff}.btn.p:hover{background:var(--pr2)}.btn.s{padding:6px 10px;font-size:13px}.btn:disabled{opacity:.6}
+.mut{color:var(--mut)}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 130px}.err{color:var(--warn);font-weight:600;margin:6px 0}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}.k div{background:var(--card);border:1px solid var(--br);border-radius:14px;padding:12px}.k small{color:var(--mut);display:block}.k b{font-size:21px}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;background:var(--soft);color:var(--pr)}.tag.r{background:#fef3c7;color:#92400e}
+.ed{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}@media(max-width:900px){.ed{grid-template-columns:1fr}}
+.pv{position:sticky;top:12px}.pv iframe{width:100%;height:600px;border:8px solid #111;border-radius:30px;background:#fff}
+.lk{border:1px solid var(--br);border-radius:12px;padding:10px;margin-bottom:10px;background:var(--bg)}.hide{display:none}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.chips button{padding:8px 12px}
+img.qr{width:200px;height:200px;display:block;margin:10px auto;background:#fff;padding:6px;border-radius:10px}
+.out{background:var(--soft);border-radius:12px;padding:10px;overflow-wrap:anywhere;font-weight:600;margin:8px 0}
+</style>
+</head>
+<body>
+<div class="w">
+<header><img src="/logo.png" alt="NexTap"><span class="row" style="flex:0 0 auto"><a class="btn" href="/revendedor/">← Meu painel</a><a class="btn" href="/avaliacao">Conversor de link</a></span></header>
+<div id="v"></div>
+</div>
+<script>
+var API='/api',TK='',B=null,LIST=null,ED=null,POLL=null,PLATES=null;
+function $(i){return document.getElementById(i)}
+function E(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function R(v){return 'R$ '+Number(v).toFixed(2).replace('.',',')}
+try{TK=localStorage.getItem('nx_token')||sessionStorage.getItem('nx_token')||''}catch(e){}
+async function api(p,o){o=o||{};var h={'Content-Type':'application/json'};if(TK)h.Authorization='Bearer '+TK;
+  var r=await fetch(API+p,{method:o.method||'GET',headers:h,body:o.body});var t=await r.text(),j={};try{j=JSON.parse(t)}catch(e){j={html:t}}
+  if(r.status===401){$('v').innerHTML='<div class="card"><b>Entre no seu painel primeiro.</b><p class="mut">Sua sessão não foi encontrada.</p><a class="btn p" href="/revendedor/">Ir para o painel</a></div>';throw new Error('Entre novamente.')}
+  if(!r.ok){var e=new Error(j.error||'Erro ('+r.status+')');throw e}return j}
+function cp(t,b){var ok=function(){var o=b.textContent;b.textContent='Copiado ✓';setTimeout(function(){b.textContent=o},1500)};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,function(){});else{var i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy');ok()}catch(e){}i.remove()}}
+
+/* ---------- lista ---------- */
+async function lista(){clearInterval(POLL);ED=null;
+  try{LIST=await api('/biosites')}catch(e){return}
+  var r=LIST.resumo;
+  $('v').innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><div><h1>🌐 Biosites</h1><span class="mut">Monte a página de links do seu cliente, publique e entregue. Seu custo: <b>'+R(LIST.preco)+'</b> por biosite — venda por R$ '+LIST.venda_min+' a R$ '+LIST.venda_max+' e fique com a diferença.</span></div><button class="btn p" onclick="novo()">+ Novo biosite</button></div>'
+   +'<div class="k"><div><small>Publicados</small><b>'+r.publicados+'</b></div><div><small>Lucro estimado</small><b>'+R(r.lucro_estimado)+'</b></div><div><small>Custo por biosite</small><b>'+R(LIST.preco)+'</b></div></div>'
+   +(LIST.lista.length?LIST.lista.map(function(b){return '<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div><b>'+E(b.titulo)+'</b> <span class="tag'+(b.status==='publicado'?'':' r')+'">'+(b.status==='publicado'?'Publicado':'Rascunho')+'</span><br><span class="mut" style="overflow-wrap:anywhere">'+E(b.url)+'</span>'
+     +'<br><span class="mut">'+(b.cliente_nome?'Cliente: '+E(b.cliente_nome)+' · ':'')+b.botoes+' botões'+(b.status==='publicado'?' · '+b.visitas+' visitas':'')+(b.preco_venda?' · vendido por '+R(b.preco_venda)+' (lucro '+R(b.preco_venda-LIST.preco)+')':'')+'</span></div>'
+     +'<div class="row" style="flex:0 0 auto"><button class="btn p s" onclick="abrir('+b.id+')">'+(b.status==='publicado'?'Editar':'Continuar')+'</button>'+(b.status==='publicado'?'<a class="btn s" target="_blank" rel="noopener" href="'+E(b.url)+'">Abrir</a>':'<button class="btn s" onclick="apagar('+b.id+')">Apagar</button>')+'</div></div></div>'}).join(''):'<div class="card mut">Nenhum biosite ainda. Clique em “Novo biosite” para começar — a prévia é grátis, você só paga ao publicar.</div>')}
+function novo(){var n=prompt('Nome do negócio do seu cliente (ex.: Barbearia do João):');if(!n)return;
+  api('/biosites',{method:'POST',body:JSON.stringify({titulo:n})}).then(function(b){abrir(b.id)}).catch(function(e){alert(e.message)})}
+function apagar(id){if(!confirm('Apagar este rascunho?'))return;api('/biosites/'+id,{method:'DELETE'}).then(lista).catch(function(e){alert(e.message)})}
+
+/* ---------- editor ---------- */
+var TP={
+ whatsapp:{nm:'WhatsApp',f:[['numero','Número com DDD (ex.: 75 98820-9055)'],['mensagem','Mensagem pronta (opcional)']]},
+ instagram:{nm:'Instagram',f:[['perfil','@ do perfil ou link']]},
+ facebook:{nm:'Facebook',f:[['pagina','Link ou nome da página']]},
+ google:{nm:'Avaliação Google',f:[['url','Link de avaliação do Google (use o Conversor de link)']]},
+ site:{nm:'Site',f:[['url','Endereço do site']]},
+ pix:{nm:'Pix',f:[['chave','Chave Pix (CPF, CNPJ, telefone, e-mail ou aleatória)'],['nome','Nome do recebedor (como no banco)'],['cidade','Cidade do recebedor'],['valor','Valor fixo (opcional)'],['descricao','Descrição (opcional)']]},
+ telefone:{nm:'Ligar',f:[['numero','Telefone com DDD']]},
+ maps:{nm:'Localização (Maps)',f:[['url','Link do Google Maps']]},
+ email:{nm:'E-mail',f:[['email','E-mail']]},
+ outro:{nm:'Outro link',f:[['url','Endereço do link']]}
+},ROT={whatsapp:'Falar no WhatsApp',instagram:'Instagram',facebook:'Facebook',google:'Avalie no Google',site:'Nosso site',pix:'Pagar com Pix',telefone:'Ligar agora',maps:'Como chegar',email:'Enviar e-mail',outro:'Saiba mais'};
+async function abrir(id){clearInterval(POLL);try{ED=await api('/biosites/'+id)}catch(e){return alert(e.message)}ED.links=ED.links||[];editor();prev()}
+function editor(){var b=ED,pub=b.status==='publicado';
+  $('v').innerHTML='<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><div><button class="btn s" onclick="lista()">← Biosites</button> <b style="font-size:20px;margin-left:8px">'+E(b.titulo)+'</b> <span class="tag'+(pub?'':' r')+'">'+(pub?'Publicado':'Rascunho')+'</span></div><div class="row" style="flex:0 0 auto"><button class="btn" id="bs" onclick="salvar()">Salvar e atualizar prévia</button>'+(pub?'':'<button class="btn p" id="bp" onclick="publicar()">Publicar por '+R(LIST?LIST.preco:25)+'</button>')+'</div></div><div class="err" id="er"></div>'
+  +'<div class="ed"><div>'
+  +'<div class="card"><h3>Dados do negócio</h3><label class="l">Nome do negócio</label><input id="e_t" value="'+E(b.titulo)+'" maxlength="60"><label class="l">Descrição curta</label><textarea id="e_b" maxlength="400" placeholder="Ex.: Cortes e barba em Feira de Santana. Agende pelo WhatsApp!">'+E(b.bio)+'</textarea>'
+  +'<label class="l">Foto ou logo</label><div class="row" style="align-items:center"><input type="file" id="e_f" accept="image/*" onchange="foto(this)"><button class="btn s" onclick="ED.foto=null;prev(1)">Remover</button></div>'
+  +'<label class="l">Visual</label><div class="chips">'+[['claro','Claro'],['escuro','Escuro'],['gradiente','Gradiente']].map(function(t){return '<button class="btn'+(b.tema===t[0]?' p':'')+'" onclick="keep();ED.tema=\''+t[0]+'\';editor();prev(1)">'+t[1]+'</button>'}).join('')+'</div>'
+  +'<label class="l">Cor de destaque</label><input type="color" id="e_c" value="'+E(b.cor||'#15803d')+'" style="height:44px;padding:4px" onchange="ED.cor=this.value;prev(1)"></div>'
+  +'<div class="card"><h3>Botões</h3><div id="bts"></div><div class="row"><select id="nt">'+Object.keys(TP).map(function(k){return '<option value="'+k+'">'+TP[k].nm+'</option>'}).join('')+'</select><button class="btn p" onclick="addBt()">+ Adicionar botão</button></div></div>'
+  +'<div class="card"><h3>Endereço e venda</h3><label class="l">Endereço do biosite ('+location.host+'/b/…)</label><input id="e_s" value="'+E(b.slug)+'" maxlength="30"'+(pub?' disabled':'')+'><label class="l">Nome do seu cliente (só para o seu controle)</label><input id="e_n" value="'+E(b.cliente_nome||'')+'"><label class="l">Por quanto você vendeu? (R$ 100 a R$ 200)</label><input id="e_p" inputmode="decimal" value="'+E(b.preco_venda==null?'':b.preco_venda)+'" placeholder="150" oninput="luc()"><div class="mut" id="luc"></div></div>'
+  +(pub?entrega():'')+'<div class="card hide" id="cPix"></div><div class="card hide" id="cPl"></div></div>'
+  +'<div class="pv"><iframe id="pv" title="Prévia"></iframe><p class="mut" style="text-align:center;font-size:13px">Prévia do que o cliente vai ver</p></div></div>';
+  bts();luc()}
+function keep(){try{coleta();ED.titulo=$('e_t').value;ED.bio=$('e_b').value;ED.cliente_nome=$('e_n').value;ED.preco_venda=$('e_p').value;if(ED.status!=='publicado')ED.slug=$('e_s').value}catch(e){}}
+function luc(){var v=parseFloat(String(($('e_p')||{}).value||'').replace(',','.')),el=$('luc');if(!el)return;var c=LIST?LIST.preco:25;el.textContent=v>0?'Seu lucro: '+R(v-c)+' (custo '+R(c)+')':''}
+function bts(){$('bts').innerHTML=ED.links.length?ED.links.map(function(l,i){var t=TP[l.tipo];return '<div class="lk"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px"><b>'+t.nm+'</b><span><button class="btn s" onclick="mv('+i+',-1)">↑</button> <button class="btn s" onclick="mv('+i+',1)">↓</button> <button class="btn s" onclick="rm('+i+')">Remover</button></span></div>'
+  +'<input data-i="'+i+'" data-k="rotulo" value="'+E(l.rotulo||ROT[l.tipo])+'" maxlength="40" placeholder="Texto do botão">'+t.f.map(function(f){return '<input data-i="'+i+'" data-k="c.'+f[0]+'" value="'+E((l.campos||{})[f[0]]||'')+'" placeholder="'+E(f[1])+'">'}).join('')+'</div>'}).join(''):'<p class="mut">Nenhum botão ainda. Escolha o tipo abaixo e adicione.</p>'}
+function coleta(){document.querySelectorAll('#bts input').forEach(function(x){var i=+x.dataset.i,k=x.dataset.k;if(k==='rotulo')ED.links[i].rotulo=x.value;else{ED.links[i].campos=ED.links[i].campos||{};ED.links[i].campos[k.slice(2)]=x.value}})}
+function addBt(){coleta();var t=$('nt').value;ED.links.push({tipo:t,rotulo:ROT[t],campos:{}});bts()}
+function rm(i){coleta();ED.links.splice(i,1);bts()}
+function mv(i,d){coleta();var j=i+d;if(j<0||j>=ED.links.length)return;var x=ED.links[i];ED.links[i]=ED.links[j];ED.links[j]=x;bts()}
+function foto(inp){var f=inp.files[0];if(!f)return;var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var c=document.createElement('canvas'),s=Math.min(im.width,im.height);c.width=c.height=256;c.getContext('2d').drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,256,256);ED.foto=c.toDataURL('image/jpeg',.82);prev(1)};im.src=r.result};r.readAsDataURL(f)}
+function corpo(){coleta();var o={titulo:$('e_t').value,bio:$('e_b').value,tema:ED.tema,cor:ED.cor,foto:ED.foto||'',cliente_nome:$('e_n').value,preco_venda:$('e_p').value,links:ED.links.map(function(l){return {tipo:l.tipo,rotulo:l.rotulo,campos:l.campos}})};if(ED.status!=='publicado')o.slug=$('e_s').value;return o}
+async function salvar(){$('er').textContent='';var bt=$('bs');bt.disabled=true;try{ED=Object.assign(ED,await api('/biosites/'+ED.id,{method:'PUT',body:JSON.stringify(corpo())}));bts();await prev();bt.textContent='Salvo ✓';setTimeout(function(){bt.textContent='Salvar e atualizar prévia'},1500);return true}catch(e){$('er').textContent=e.message;return false}finally{bt.disabled=false}}
+async function prev(local){try{if(local&&$('e_t')){/* prévia só de dados já salvos: salva em silêncio */await api('/biosites/'+ED.id,{method:'PUT',body:JSON.stringify({tema:ED.tema,cor:ED.cor,foto:ED.foto||''})})}
+  var h=await fetch(API+'/biosites/'+ED.id+'/preview',{headers:{Authorization:'Bearer '+TK}});$('pv').srcdoc=await h.text()}catch(e){if($('er'))$('er').textContent=e.message}}
+
+/* ---------- publicar (Pix) ---------- */
+async function publicar(){if(!await salvar())return;var c=$('cPix');c.className='card';c.innerHTML='Gerando Pix…';c.scrollIntoView({behavior:'smooth'});
+  try{var x=await api('/biosites/'+ED.id+'/publicar',{method:'POST'});
+    c.innerHTML='<h3>Pague '+R(x.valor)+' no Pix para publicar</h3><p class="mut" style="margin:0">Leia o QR Code no app do banco ou use o copia-e-cola. O biosite entra no ar sozinho assim que o pagamento cair.</p>'
+     +(x.pix_qr_base64?'<img class="qr" alt="QR Code Pix" src="data:image/png;base64,'+E(x.pix_qr_base64)+'">':'')+'<input id="pxc" readonly value="'+E(x.pix_qr_code)+'" onclick="this.select()"><button class="btn p" style="width:100%" onclick="cp($(\'pxc\').value,this)">Copiar código Pix</button><p class="mut" id="pxs" style="margin:10px 0 0">Aguardando pagamento…</p>';
+    clearInterval(POLL);var n=0;POLL=setInterval(async function(){n++;if(n>180){clearInterval(POLL);return}
+      try{var s=await api('/biosites/pagamento/'+x.id);if(s.status==='pago'){clearInterval(POLL);ED=Object.assign(ED,s.biosite);editor();prev();window.scrollTo(0,0)}else if(s.status==='cancelado'){clearInterval(POLL);$('pxs').textContent='Pagamento cancelado. Clique em Publicar para gerar outro Pix.'}}catch(e){}},5000)}
+  catch(e){c.innerHTML='<div class="err">'+E(e.message)+'</div>'}}
+
+/* ---------- entrega ---------- */
+function entrega(){var u=ED.url,msg='Olá! Seu biosite está no ar: '+u;
+  return '<div class="card" style="border-color:var(--pr)"><h3>🎉 Biosite no ar — entregue ao seu cliente</h3><div class="out">'+E(u)+'</div><div class="row"><button class="btn p" onclick="cp(\''+E(u)+'\',this)">Copiar link</button><a class="btn" target="_blank" rel="noopener" href="'+E(u)+'">Abrir</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(msg)+'">Enviar por WhatsApp</a><button class="btn" onclick="usarPlaca()">Usar em uma placa</button></div><p class="mut" style="margin:8px 0 0">'+ED.visitas+' visitas até agora. As alterações que você salvar aparecem na hora, no mesmo link.</p></div>'}
+async function usarPlaca(){var c=$('cPl');c.className='card';c.innerHTML='Carregando suas placas…';c.scrollIntoView({behavior:'smooth'});
+  try{var P=await api('/resellers/plates');if(!P.length){c.innerHTML='<b>Você ainda não tem placas.</b><p class="mut">Compre placas no painel e volte aqui para direcionar.</p>';return}
+    c.innerHTML='<h3>Direcionar placa ao biosite</h3><select id="selPl">'+P.map(function(p){return '<option value="'+p.id+'">'+E(p.tracking_code||('#'+p.id))+(p.plate_label?' · '+E(p.plate_label):'')+(p.destination_url?' (já configurada)':' (livre)')+'</option>'}).join('')+'</select><div class="row"><button class="btn p" id="btPl">Direcionar</button><button class="btn" onclick="$(\'cPl\').className=\'card hide\'">Cancelar</button></div><div class="err" id="ePl"></div>';
+    $('btPl').onclick=async function(){try{await api('/resellers/plates/'+$('selPl').value+'/direcionar',{method:'POST',body:JSON.stringify({url:ED.url})});c.innerHTML='<b style="color:var(--pr)">✓ Placa direcionada!</b> <span class="mut">Aproxime o celular para testar.</span>'}catch(e){$('ePl').textContent=e.message}}}
+  catch(e){c.innerHTML='<div class="err">'+E(e.message)+'</div>'}}
+lista();
+</script>
+</body>
+</html>

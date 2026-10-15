@@ -41,11 +41,16 @@ router.post('/conversor', (req, res) => {
 });
 
 // Aponta uma placa para um link gerado no conversor (NFC / QR passam a abrir esse destino).
-const TIPO_PLACA = { google: 'Google Avaliações', whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', pix: 'Link personalizado' };
+const TIPO_PLACA = { google: 'Google Avaliações', whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', pix: 'Link personalizado', biosite: 'Site' };
 router.post('/plates/:id/direcionar', (req, res) => {
   const plate = db.prepare('SELECT id FROM plates WHERE id = ? AND reseller_id = ?').get(req.params.id, req.resellerId);
   if (!plate) return res.status(404).json({ error: 'Placa não encontrada.' });
-  const l = db.prepare('SELECT link, tipo FROM gl_links WHERE reseller_id = ? AND link = ? ORDER BY id DESC').get(req.resellerId, String((req.body || {}).url || ''));
+  const u = String((req.body || {}).url || '');
+  let l = db.prepare('SELECT link, tipo FROM gl_links WHERE reseller_id = ? AND link = ? ORDER BY id DESC').get(req.resellerId, u);
+  if (!l) { // link de um biosite publicado do próprio revendedor
+    const m = u.match(/\/b\/([a-z0-9-]+)$/), b = m && db.prepare("SELECT slug FROM biosites WHERE reseller_id = ? AND slug = ? AND status = 'publicado'").get(req.resellerId, m[1]);
+    if (b) l = { link: u, tipo: 'biosite' };
+  }
   if (!l) return res.status(400).json({ error: 'Esse link não foi gerado na sua conta.' });
   db.prepare(`UPDATE plates SET destination_url = ?, destination_type = ?, status = 'ativa' WHERE id = ?`).run(l.link, TIPO_PLACA[l.tipo] || 'Link personalizado', plate.id);
   res.json({ ok: true });
