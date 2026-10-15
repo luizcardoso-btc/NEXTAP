@@ -66,6 +66,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td{padding:8px 4px;bord
   </div>
   <div class="card" id="cPlanos"></div>
   <div class="card hide" id="cPix"></div>
+  <div class="card hide" id="cPlaca"></div>
   <div class="card"><h3 style="margin:0 0 6px">Seus links</h3><div id="lista" class="mut">Nenhum link ainda.</div></div>
 </div>
 </div>
@@ -98,7 +99,7 @@ function pintar(s){
   $('cPlanos').innerHTML='<h3 style="margin:0 0 10px">Planos</h3><div class="plans">'+s.planos.map(function(p){
     var on=s.plano===p.id;return '<div class="plan'+(on?' on':'')+'"><b>'+R(p.preco)+'<span style="font-size:14px">/mês</span></b><small>'+(p.limite?'até '+p.limite+' links':'links ilimitados')+'</small><br>'
      +'<button class="btn p" style="margin-top:10px;width:100%" onclick="assinar(\''+p.id+'\')">'+(on?'Renovar 30 dias':'Assinar')+' via Pix</button></div>'}).join('')+'</div><p class="mut" style="font-size:13px;margin:10px 0 0">Pagamento por Pix, 30 dias por vez. Os links já gerados continuam funcionando mesmo se o plano vencer.</p>';
-  var L=s.links||[];$('lista').innerHTML=L.length?'<table>'+L.map(function(l){return '<tr><td><b>'+((TIPOS[l.tipo]||{}).ic||'🔗')+' '+E(l.nome||'Link')+'</b><br><a href="'+E(l.link)+'" target="_blank" rel="noopener" style="color:var(--pr)">'+E(l.link)+'</a></td><td style="width:70px"><button class="btn" onclick="cp(\''+E(l.link)+'\',this)">Copiar</button></td></tr>'}).join('')+'</table>':'Nenhum link ainda.'}
+  var L=s.links||[];$('lista').innerHTML=L.length?'<table>'+L.map(function(l){return '<tr><td><b>'+((TIPOS[l.tipo]||{}).ic||'🔗')+' '+E(l.nome||'Link')+'</b><br><a href="'+E(l.link)+'" target="_blank" rel="noopener" style="color:var(--pr)">'+E(l.link)+'</a></td><td style="width:110px"><button class="btn" onclick="cp(\''+E(l.link)+'\',this)">Copiar</button><br><button class="btn" style="margin-top:6px" onclick="usarPlaca(\''+E(l.link)+'\')">Usar em placa</button></td></tr>'}).join('')+'</table>':'Nenhum link ainda.'}
 async function recarregar(){pintar(await api('/resellers/google-plano'))}
 function cp(t,b){var ok=function(){var o=b.textContent;b.textContent='Copiado ✓';setTimeout(function(){b.textContent=o},1500)};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,function(){});else{var i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy');ok()}catch(e){}i.remove()}}
@@ -117,10 +118,20 @@ async function converter(){
   $('gerr').textContent='';$('gout').innerHTML='';$('gbt').disabled=true;var t0=$('gbt').textContent;$('gbt').textContent='Gerando…';
   var b={};TIPOS[TP].f.forEach(function(f){b[f[0]]=$('c_'+f[0]).value.trim()});
   try{var r=TP==='google'?await api('/resellers/google-avaliacao',{method:'POST',body:JSON.stringify(b)}):await api('/resellers/conversor',{method:'POST',body:JSON.stringify(Object.assign({tipo:TP},b))});
-    $('gout').innerHTML='<div class="out">'+(r.nome?E(r.nome)+'<br>':'')+E(r.link)+'</div>'+(r.tipo_chave?'<p class="mut" style="margin:0 0 8px">Chave reconhecida como <b>'+E(r.tipo_chave)+'</b>. Se estiver errado, confira os números.</p>':'')+'<div class="row"><button class="btn p" onclick="cp(\''+E(r.link)+'\',this)">Copiar link</button><a class="btn" href="'+E(r.link)+'" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Testar link</a></div><p class="mut" style="font-size:13px;margin:8px 0 0">Cole este link no destino da placa ou grave direto no NFC.</p>';
+    $('gout').innerHTML='<div class="out">'+(r.nome?E(r.nome)+'<br>':'')+E(r.link)+'</div>'+(r.tipo_chave?'<p class="mut" style="margin:0 0 8px">Chave reconhecida como <b>'+E(r.tipo_chave)+'</b>. Se estiver errado, confira os números.</p>':'')+'<div class="row"><button class="btn p" onclick="cp(\''+E(r.link)+'\',this)">Copiar link</button><a class="btn" href="'+E(r.link)+'" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Testar link</a><button class="btn p" onclick="usarPlaca(\''+E(r.link)+'\')">Usar em uma placa</button></div><p class="mut" style="font-size:13px;margin:8px 0 0">Cole este link no destino da placa ou grave direto no NFC.</p>';
     TIPOS[TP].f.forEach(function(f){$('c_'+f[0]).value=''});recarregar()}
   catch(e){$('gerr').textContent=e.message;if(e.data&&e.data.limite)$('cPlanos').scrollIntoView({behavior:'smooth'})}
   finally{$('gbt').disabled=false;$('gbt').textContent=t0}}
+async function usarPlaca(url){
+  var c=$('cPlaca');c.className='card';c.innerHTML='Carregando suas placas…';c.scrollIntoView({behavior:'smooth'});
+  try{var P=await api('/resellers/plates');
+    if(!P.length){c.innerHTML='<b>Você ainda não tem placas.</b><p class="mut">Compre placas no painel e depois direcione o link aqui.</p><a class="btn p" href="/revendedor/" style="text-decoration:none">Ir para o painel</a>';return}
+    c.innerHTML='<h3 style="margin:0 0 4px">Direcionar a placa</h3><p class="mut" style="margin:0 0 8px;overflow-wrap:anywhere">O NFC / QR da placa passa a abrir:<br><b style="color:var(--tx)">'+E(url)+'</b></p><select id="selPl" style="padding:12px;border:1px solid var(--br);border-radius:10px;background:var(--card);color:var(--tx);font:inherit;width:100%;margin-bottom:10px">'
+     +P.map(function(p){return '<option value="'+p.id+'">'+E(p.tracking_code||('#'+p.id))+(p.plate_label?' · '+E(p.plate_label):'')+(p.destination_url?' (já configurada)':' (livre)')+'</option>'}).join('')+'</select>'
+     +'<div class="row"><button class="btn p" id="btPl">Direcionar placa</button><button class="btn" onclick="$(\'cPlaca\').className=\'card hide\'">Cancelar</button></div><div class="err" id="ePl"></div>';
+    $('btPl').onclick=async function(){$('ePl').textContent='';try{await api('/resellers/plates/'+$('selPl').value+'/direcionar',{method:'POST',body:JSON.stringify({url:url})});
+      c.innerHTML='<b style="color:var(--pr)">✓ Placa direcionada!</b><p class="mut">Aproxime o celular ou leia o QR Code para testar. Você acompanha as leituras em Minhas placas.</p><a class="btn p" href="/revendedor/" style="text-decoration:none">Ver minhas placas</a>'}catch(e){$('ePl').textContent=e.message}}}
+  catch(e){c.innerHTML='<div class="err">'+E(e.message)+'</div>'}}
 async function assinar(p){
   var c=$('cPix');c.className='card';c.innerHTML='Gerando Pix…';c.scrollIntoView({behavior:'smooth'});
   try{var x=await api('/resellers/google-plano/assinar',{method:'POST',body:JSON.stringify({plano:p})});
