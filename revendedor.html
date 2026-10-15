@@ -142,8 +142,8 @@ async function sub(){
   if(mode==='f'){
     if(email.indexOf('@')<1)return alert('Informe o e-mail da sua conta.');
     $('ab').disabled=true;
-    try{await api('/auth/forgot',{method:'POST',body:JSON.stringify({email:email})});
-      $('at2').textContent='Pronto! Se este e-mail estiver cadastrado, enviamos o link para criar uma nova senha. Olhe também o spam.';
+    try{var fr=await api('/auth/forgot',{method:'POST',body:JSON.stringify({email:email})});
+      $('at2').textContent=(fr&&fr.email_ativo===false)?'O envio automático de e-mail ainda não está ativo. Fale com o suporte pelo WhatsApp abaixo e receba uma nova senha na hora.':'Pronto! Se este e-mail estiver cadastrado, enviamos o link para criar uma nova senha. Olhe também o spam.';
       $('anote').innerHTML='Não recebeu? <a style="color:var(--pr);font-weight:700" target="_blank" rel="noopener" href="https://wa.me/5575988209055?text='+encodeURIComponent('Olá! Preciso redefinir a senha do meu painel NexTap. Meu e-mail: '+email)+'">Fale com o suporte no WhatsApp</a>';
     }catch(e){alert(e.message)}finally{$('ab').disabled=false}
     return;
@@ -263,6 +263,7 @@ var S=function(l,v){return '<div><small class="mut">'+l+'</small><b style="displ
 var cfg='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Configuração da placa</h3><span>Situação: '+plTag(p)+'</span></div>'
 +'<div style="display:grid;gap:12px;margin-top:14px">'
 +'<label>Código da placa<input id="f0" value="'+E(pc(p))+'" placeholder="#00001" style="font-weight:700"><small class="mut">Código de rastreio impresso na frente da placa.</small></label>'
++'<label>Link da placa (grave no NFC / use no QR)<input id="fl" readonly value="'+location.origin+'/r/'+E(p.code)+'" onclick="this.select()"><small class="mut">Este link nunca muda; o destino abaixo pode ser trocado quando quiser.</small></label>'
 +'<label>Nome do cliente / empresa<input id="f1" value="'+E(p.client_name)+'" placeholder="Ex.: Barbearia João"></label>'
 +'<label>Nome / identificação da placa<input id="f2" value="'+E(p.plate_label)+'" placeholder="Ex.: Barbearia João - Balcão"></label>'
 +'<label>Tipo de destino<select id="f3" onchange="phDest()">'+tipos.map(function(t){return '<option'+(p.destination_type===t?' selected':'')+'>'+E(t)+'</option>'}).join('')+'</select></label>'

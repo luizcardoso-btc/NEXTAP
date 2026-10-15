@@ -18,7 +18,7 @@ router.post('/register', async (req, res) => {
       || !name.trim() || !email.includes('@') || password.length < 6) {
     return res.status(400).json({ error: 'Informe nome, e-mail e senha (mínimo 6 caracteres).' });
   }
-  const existing = db.prepare('SELECT id FROM resellers WHERE email = ?').get(email.toLowerCase());
+  const existing = db.prepare('SELECT id FROM resellers WHERE lower(email) = ?').get(email.toLowerCase().trim());
   if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
 
   const hash = await bcrypt.hash(password, 10);
@@ -36,7 +36,7 @@ router.post('/login', async (req, res) => {
   if (senha.limitado('login:' + req.ip + ':' + String(email || '').toLowerCase(), 10)) {
     return res.status(429).json({ error: 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.' });
   }
-  const r = db.prepare('SELECT * FROM resellers WHERE email = ?').get(String(email || '').toLowerCase().trim());
+  const r = db.prepare('SELECT * FROM resellers WHERE lower(email) = ?').get(String(email || '').toLowerCase().trim());
   if (!r) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
   const ok = await bcrypt.compare(password || '', r.password_hash);
   if (!ok) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
@@ -50,13 +50,13 @@ router.post('/forgot', async (req, res) => {
   const email = String((req.body || {}).email || '').toLowerCase().trim();
   if (!email.includes('@')) return res.status(400).json({ error: 'Informe o e-mail da sua conta.' });
   if (senha.limitado(req.ip)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
-  const r = db.prepare('SELECT id, name, email FROM resellers WHERE email = ?').get(email);
+  const r = db.prepare('SELECT id, name, email FROM resellers WHERE lower(email) = ?').get(email);
   if (r) {
     const link = senha.criarLink(req, r.id, 1);
     const enviado = await senha.enviarEmail(r.email, r.name, link).catch(() => false);
     if (!enviado) console.log(`[SENHA] E-mail não configurado. Link de redefinição (1h) para ${r.email}: ${link}`);
   }
-  res.json({ ok: true });
+  res.json({ ok: true, email_ativo: !!(process.env.RESEND_API_KEY && process.env.MAIL_FROM) });
 });
 
 // Define a nova senha a partir do link e já entra no painel.
