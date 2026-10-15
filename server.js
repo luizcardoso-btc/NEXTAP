@@ -62,6 +62,7 @@ app.use('/api/payments', require('./routes-payments.js'));
 app.use('/api/admin', require('./routes-admin.js'));
 app.use('/', require('./catalogo.js')); // catálogo de produtos (LP + checkout do revendedor + /admin/catalogo)
 app.use('/', require('./declaracao-conteudo.js')); // declaração de conteúdo em PDF (página /admin/declaracao + API)
+app.use('/', require('./biosite.js')); // biosites: /b/:slug público, /api/biosites (revendedor) e /api/admin/biosites
 app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / NFC da placa e /api/public/stats
 
 // Site (/), painel do revendedor (/revendedor) e painel admin (/admin) — servidos pelo próprio backend,
@@ -73,6 +74,7 @@ app.get('/', page('site.html'));
 app.get(['/revendedor', '/revendedor/'], page('revendedor.html'));
 app.get(['/admin', '/admin/'], page('admin.html'));
 app.get(['/avaliacao', '/avaliacao/'], page('google-link.html'));
+app.get(['/biosites', '/biosites/'], page('biosite-painel.html'));
 
 // 404 e erro genérico em JSON (evita devolver stack trace e HTML para o frontend)
 app.use((req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));

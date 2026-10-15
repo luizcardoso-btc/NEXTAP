@@ -97,4 +97,4 @@ async function conferir(resellerId, pagId, fetchFn = fetch) {
   return { ...view(novo), estado: estado(resellerId) };
 }
 
-module.exports = { PLANOS, estado, registrar, listarLinks, criarPix, aplicarPagamento, conferir };
+module.exports = { PLANOS, estado, registrar, listarLinks, criarPix, aplicarPagamento, conferir, mp };
