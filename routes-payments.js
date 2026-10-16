@@ -251,7 +251,7 @@ router.get('/orders/:id/status', requireReseller, async (req, res) => {
       order = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
     }
   }
-  res.json(pedidos.decorar(order));
+  res.json(pedidos.decorarPublico(order));
 });
 
 // Reabrir o pagamento de um pedido que ainda está aguardando (Pix ou link do cartão).
