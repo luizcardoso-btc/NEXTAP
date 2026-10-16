@@ -149,16 +149,21 @@ router.post('/checkout', requireReseller, async (req, res) => {
   const ship = entrega.dados;
 
   const price = unitPrice(qty);
-  const frete = db.freteFixo();                                  // frete fixo por pedido
+  // Frete: cotado ao vivo no Melhor Envio pelo CEP (o servidor recalcula); se estiver indisponível, usa o frete fixo.
+  const fr = await require('./melhor-envio.js').resolverFrete(ship.cep, qty, body.frete_servico);
+  const frete = fr.preco;
+  if (body.frete_esperado != null && Math.abs(Number(body.frete_esperado) - frete) > 0.009) {
+    return res.status(409).json({ error: `O frete mudou para R$ ${frete.toFixed(2).replace('.', ',')}. Confira o novo total e finalize novamente.`, frete, frete_mudou: true });
+  }
   const subtotal = Math.round(price * qty * 100) / 100;           // só as placas
   const total = Math.round((subtotal + frete) * 100) / 100;       // o que o cliente paga
   const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.resellerId);
 
   const orderInfo = db.prepare(
     `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee,
-       ship_name, ship_phone, ship_cep, ship_street, ship_number, ship_complement, ship_district, ship_city, ship_state)
-     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(req.resellerId, qty_azul, qty_preta, price, total, method, frete,
+       shipping_service, me_servico_id, ship_name, ship_phone, ship_cep, ship_street, ship_number, ship_complement, ship_district, ship_city, ship_state)
+     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(req.resellerId, qty_azul, qty_preta, price, total, method, frete, fr.nome || null, fr.servicoId,
         ship.name, ship.phone, ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state);
   const orderId = orderInfo.lastInsertRowid;
   // Guarda como endereço padrão do revendedor (o próximo checkout já vem preenchido).
@@ -207,7 +212,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
       body: {
         items: [
           { title: `NexTap — ${qty} placa(s) NFC`, quantity: 1, unit_price: subtotal, currency_id: 'BRL' },
-          ...(frete > 0 ? [{ title: 'Frete (envio pelos Correios)', quantity: 1, unit_price: frete, currency_id: 'BRL' }] : []),
+          ...(frete > 0 ? [{ title: 'Frete' + (fr.nome ? ' (' + fr.nome + ')' : ' (envio)'), quantity: 1, unit_price: frete, currency_id: 'BRL' }] : []),
         ],
         payer: { email: String(payer.email).trim(), name: payer.first_name },
         external_reference: String(orderId),
