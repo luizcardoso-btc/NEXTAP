@@ -18,7 +18,8 @@ const EMBALAGEM = { me_comp: '20', me_larg: '15', me_alt: '5', me_peso_base: '0.
 const embalagem = () => Object.fromEntries(Object.entries(EMBALAGEM).map(([k, d]) => [k, set(k, d)]));
 
 const base = () => (process.env.MELHOR_ENVIO_BASE || (process.env.MELHOR_ENVIO_SANDBOX === '1' ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br')).replace(/\/$/, '');
-const token = () => process.env.MELHOR_ENVIO_TOKEN || '';
+// Limpa o que costuma vir junto ao colar: espaços, quebras de linha, aspas e o prefixo "Bearer ".
+const token = () => String(process.env.MELHOR_ENVIO_TOKEN || '').replace(/\s+/g, '').replace(/^["']+|["']+$/g, '').replace(/^Bearer/i, '');
 const contato = () => process.env.MELHOR_ENVIO_EMAIL || set('me_email', '') || process.env.MAIL_FROM || 'contato@nextapbrasil.com.br';
 
 async function api(metodo, caminho, corpo) {
@@ -35,7 +36,7 @@ async function api(metodo, caminho, corpo) {
   if (!r.ok) {
     let m = j.message || j.error || '';
     if (j.errors && typeof j.errors === 'object') m += ' ' + Object.values(j.errors).flat().join(' ');
-    if (r.status === 401) m = 'Token do Melhor Envio inválido ou expirado. Gere outro em Configurações > Tokens.';
+    if (r.status === 401) m = 'o Melhor Envio recusou o token. Confira se a variável MELHOR_ENVIO_TOKEN no Railway tem o token completo e sem aspas, se não há MELHOR_ENVIO_SANDBOX=1 com token de produção (ou o contrário) e se o token tem as permissões de envio.';
     throw Object.assign(new Error('Melhor Envio: ' + (String(m).trim() || ('erro ' + r.status))), { status: r.status === 401 ? 401 : 422, detalhe: j });
   }
   return j;
