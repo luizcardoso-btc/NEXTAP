@@ -420,6 +420,21 @@ CREATE TABLE IF NOT EXISTS sales (
       criado_em TEXT NOT NULL DEFAULT (datetime('now')), atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `),
+  // v19 — prospecção de empresas locais: cadastro, status do funil e histórico de contatos. Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS prospectos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, segmento TEXT NOT NULL DEFAULT '', contato TEXT NOT NULL DEFAULT '',
+      telefone TEXT NOT NULL DEFAULT '', instagram TEXT NOT NULL DEFAULT '', endereco TEXT NOT NULL DEFAULT '', bairro TEXT NOT NULL DEFAULT '',
+      obs TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'novo', prox_contato TEXT, motivo_perda TEXT NOT NULL DEFAULT '',
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_prospectos_status ON prospectos(status, prox_contato);
+    CREATE TABLE IF NOT EXISTS prospecto_hist (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, prospecto_id INTEGER NOT NULL, tipo TEXT NOT NULL DEFAULT 'nota', texto TEXT NOT NULL DEFAULT '',
+      criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_prospecto_hist ON prospecto_hist(prospecto_id, id);
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
