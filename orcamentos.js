@@ -10,6 +10,9 @@ const { requireAdmin } = require('./auth-middleware.js');
 const exp = require('./exportar-placas.js');
 
 const router = express.Router();
+const pastaImg = path.join(path.dirname(db.meta.arquivo), 'catalogo-img');
+// Foto da linha no PDF: só imagens salvas aqui em JPG/PNG (o PDF não lê WebP nem link externo).
+const imgBuf = u => { const m = /^\/catalogo-img\/([\w.-]+\.(?:jpe?g|png))$/i.exec(u || ''); if (!m) return null; try { return require('fs').readFileSync(path.join(pastaImg, m[1])); } catch (e) { return null; } };
 const getSet = db.prepare('SELECT valor FROM settings WHERE chave = ?');
 const set = (k, d = '') => { const r = getSet.get(k); return r ? r.valor : d; };
 const dig = v => String(v ?? '').replace(/\D/g, '');
@@ -23,11 +26,13 @@ const numero = id => String(id).padStart(4, '0');
 const docFmt = v => { const d = dig(v); if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5'); if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4'); return v || ''; };
 const telFmt = v => { const d = dig(v); return d.length === 11 ? d.replace(/^(\d\d)(\d{5})(\d{4})$/, '($1) $2-$3') : d.length === 10 ? d.replace(/^(\d\d)(\d{4})(\d{4})$/, '($1) $2-$3') : (v || ''); };
 
+const imgOk = u => { u = String(u || '').trim(); return (/^\/catalogo-img\/[\w.-]+$/.test(u) || /^https:\/\/[^\s"'<>]{1,280}$/i.test(u)) ? u : ''; };
+
 function ler(corpo) {
   const b = corpo || {};
   const nome = txt(b.cliente_nome, 120);
   if (!nome) return { erro: 'Informe o nome do cliente.' };
-  const itens = (Array.isArray(b.itens) ? b.itens : []).slice(0, 30).map(i => ({ desc: txt(i && i.desc, 140), qtd: Math.floor(num(i && i.qtd)), unit: money(i && i.unit) }))
+  const itens = (Array.isArray(b.itens) ? b.itens : []).slice(0, 30).map(i => ({ desc: txt(i && i.desc, 140), qtd: Math.floor(num(i && i.qtd)), unit: money(i && i.unit), img: imgOk(i && i.img) }))
     .filter(i => i.desc && i.qtd > 0 && i.unit >= 0);
   if (!itens.length) return { erro: 'Adicione ao menos um item com descrição, quantidade e valor.' };
   const frete = money(b.frete), desconto = money(b.desconto);
@@ -99,7 +104,7 @@ router.get('/o/:token', (req, res) => {
   if (!o) return res.status(404).type('html').send('<meta charset="utf-8"><body style="font-family:sans-serif;padding:40px"><h2>Orçamento não encontrado</h2><p>O link pode estar incorreto.</p>');
   const c = completo(o, base(req)), e = emitente();
   const venc = o.validade && o.validade < new Date().toISOString().slice(0, 10);
-  const linhas = c.itens.map(i => `<tr><td>${esc(i.desc)}</td><td class="r">${i.qtd}</td><td class="r">${BRL(i.unit)}</td><td class="r b">${BRL(i.qtd * i.unit)}</td></tr>`).join('');
+  const linhas = c.itens.map(i => `<tr><td>${i.img ? `<img src="${esc(i.img)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:8px;vertical-align:middle;margin-right:10px">` : ''}${esc(i.desc)}</td><td class="r">${i.qtd}</td><td class="r">${BRL(i.unit)}</td><td class="r b">${BRL(i.qtd * i.unit)}</td></tr>`).join('');
   res.type('html').send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orçamento N ${c.numero} — ${esc(e.nome)}</title>
 <style>:root{--g:#16a34a;--gd:#0f7a37;--tx:#0f172a;--mu:#64748b;--bd:#e2e8f0;--bg:#f1f5f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .w{max-width:820px;margin:0 auto;padding:18px 14px 40px}.bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:12px}.btn{border:1px solid var(--bd);background:#fff;color:var(--tx);padding:10px 16px;border-radius:999px;font:700 14px inherit;cursor:pointer;text-decoration:none}.btn.p{background:var(--g);border-color:var(--g);color:#fff}
@@ -151,9 +156,11 @@ router.get('/o/:token/pdf', (req, res) => {
   doc.font('Helvetica-Bold').fontSize(8).fillColor(MU).text('DESCRIÇÃO', col.d + 4, y).text('QTD.', col.q, y, { width: 40, align: 'right' }).text('UNITÁRIO', col.u, y, { width: 70, align: 'right' }).text('SUBTOTAL', col.s, y, { width: 75, align: 'right' });
   y += 14; doc.moveTo(L, y).lineTo(L + W, y).strokeColor('#e2e8f0').stroke(); y += 6;
   for (const i of c.itens) {
-    const h = Math.max(20, doc.font('Helvetica').fontSize(10).heightOfString(i.desc, { width: 285 }) + 10);
+    const buf = imgBuf(i.img), dx = buf ? 44 : 0;
+    const h = Math.max(buf ? 44 : 20, doc.font('Helvetica').fontSize(10).heightOfString(i.desc, { width: 285 - dx }) + 10);
     if (y + h > 740) { doc.addPage(); y = 50; }
-    doc.font('Helvetica').fontSize(10).fillColor(TX).text(i.desc, col.d + 4, y + 4, { width: 285 });
+    if (buf) { try { doc.image(buf, col.d + 4, y + 4, { fit: [36, 36], align: 'center', valign: 'center' }); } catch (e) { /* formato não suportado */ } }
+    doc.font('Helvetica').fontSize(10).fillColor(TX).text(i.desc, col.d + 4 + dx, y + (buf ? 15 : 4), { width: 285 - dx });
     doc.text(String(i.qtd), col.q, y + 4, { width: 40, align: 'right' }).text(BRL(i.unit), col.u, y + 4, { width: 70, align: 'right' });
     doc.font('Helvetica-Bold').text(BRL(i.qtd * i.unit), col.s, y + 4, { width: 75, align: 'right' });
     y += h; doc.moveTo(L, y).lineTo(L + W, y).strokeColor('#e2e8f0').stroke();

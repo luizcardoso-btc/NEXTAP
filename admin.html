@@ -15,7 +15,7 @@ input,select{padding:10px;border:1px solid var(--br);border-radius:10px;backgrou
 label{display:grid;gap:4px;font-size:12px;color:var(--mut)}.mut{color:var(--mut)}
 #auth{min-height:100vh;display:grid;place-items:center;padding:20px}#auth .box{width:100%;max-width:380px;background:var(--card);border:1px solid var(--br);border-radius:18px;padding:28px;display:grid;gap:12px}
 #app{display:none;grid-template-columns:240px 1fr;min-height:100vh}
-aside{background:var(--dk);color:#cbd5c9;border-right:1px solid var(--br);padding:18px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh}
+aside{background:var(--dk);color:#cbd5c9;border-right:1px solid var(--br);padding:18px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow-y:auto}
 aside small{color:#7d8c86;font-size:11px;letter-spacing:.06em;margin:14px 10px 4px}aside a{padding:10px 12px;border-radius:10px;font-size:14px;cursor:pointer;color:#e5efe8}aside a.on{background:#1f2a24;color:#fff;font-weight:700}
 .me{margin-top:auto;display:flex;gap:10px;align-items:center;padding:10px;border:1px solid #2a362f;border-radius:12px;font-size:13px}.av{width:34px;height:34px;border-radius:50%;background:var(--pr);color:#fff;display:grid;place-items:center;font-weight:700}
 main{padding:24px;min-width:0}.top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}h2{margin:0}
@@ -267,9 +267,13 @@ async function orcSt(){try{await api('/admin/orcamentos/'+OV.id+'/status',{metho
 async function orcDel(){if(!confirm('Excluir o orçamento N '+OV.numero+'? O link enviado ao cliente deixa de funcionar.'))return;try{await api('/admin/orcamentos/'+OV.id,{method:'DELETE'});OV=null;loadOrc()}catch(e){alert(e.message)}}
 /* formulário */
 var OMOD=['Placa NFC + QR Code (azul)','Placa NFC + QR Code (preta)','Placa Instagram degradê','Placa Pix','Placa WhatsApp'];
+var CATP=null;
+function oImgDe(d){if(!CATP)return '';var re=/azul|preta|google/i.test(d)?/avalia|google/i:/instagram/i.test(d)?/instagram/i:/pix/i.test(d)?/pix/i:/whats/i.test(d)?/whats/i:null;if(!re)return '';
+  var p=CATP.filter(function(x){return /^Placas/i.test(x.categoria)&&x.imagem&&re.test(x.nome)})[0];return p?p.imagem:''}
+function oImgs(){OI.forEach(function(i){if(i.img===undefined||i.img==='')i.img=oImgDe(i.desc)})}
 function oPlacas(){return OI.reduce(function(a,i){return a+(/^Placa/i.test(i.desc)?(+i.qtd||0):0)},0)}
 function orcForm(o){OEDIT=o||null;OFQ=null;var d=o||{};
-  OI=o?o.itens.map(function(i){return {desc:i.desc,qtd:i.qtd,unit:i.unit,man:true}}):OMOD.map(function(d){return {desc:d,qtd:0,unit:0}});
+  OI=o?o.itens.map(function(i){return {desc:i.desc,qtd:i.qtd,unit:i.unit,man:true,img:i.img||''}}):OMOD.map(function(d){return {desc:d,qtd:0,unit:0,img:''}});
   var val=d.validade||new Date(Date.now()+7*864e5).toISOString().slice(0,10);
   var f=function(id,l,v,x){return '<label>'+l+'<input id="'+id+'" value="'+E(v||'')+'" '+(x||'')+'></label>'};
   mo('<h3 style="margin:0">'+(o?'Editar orçamento N '+E(o.numero):'Novo orçamento')+'</h3>'
@@ -286,13 +290,14 @@ function orcForm(o){OEDIT=o||null;OFQ=null;var d=o||{};
   +'<label>Observações<textarea id="ov3" rows="3" placeholder="Prazo de produção, forma de pagamento...">'+E(d.obs||'')+'</textarea></label>'
   +'<div id="otot" style="background:var(--soft,#f1f5f9);border-radius:10px;padding:10px 12px;font-size:15px"></div>'
   +'<div class="row"><button class="btn p" onclick="orcSalvar()">'+(o?'Salvar alterações':'Criar orçamento')+'</button><button class="btn" onclick="cl()">Cancelar</button></div>');
-  $('mb').style.maxWidth='640px';orcRows();if(!o)orcPrecos();setTimeout(function(){$('oc1').focus()},50)}
+  $('mb').style.maxWidth='640px';orcRows();if(!o)orcPrecos();
+  if(!CATP)fetch('/api/public/catalogo').then(function(r){return r.json()}).then(function(j){CATP=j.produtos||[];oImgs();orcRows()}).catch(function(){CATP=[]});else{oImgs();orcRows()}setTimeout(function(){$('oc1').focus()},50)}
 function orcPrecos(forcar){var q=oPlacas();OI.forEach(function(i,k){if(/^Placa/i.test(i.desc)&&(forcar||!i.man)){if(forcar)i.man=false;i.unit=oPreco(q);var e=$('ouv'+k);if(e)e.value=String(i.unit).replace('.',',')}});orcTot()}
 function orcAdd(t){if(t){var ja=OI.filter(function(i){return i.desc===t})[0];if(ja){ja.qtd=(+ja.qtd||0)+10;orcRows();orcPrecos();return}}
-  OI.push({desc:t,qtd:t?10:1,unit:0});orcRows();if(t)orcPrecos()}
+  OI.push({desc:t,qtd:t?10:1,unit:0,img:oImgDe(t)});orcRows();if(t)orcPrecos()}
 function orcQtd(k,v){OI[k].qtd=parseInt(v)||0;orcPrecos()}
 function orcRows(){var c=$('oitens');if(!c)return;
-  c.innerHTML='<div class="tw"><table><tr><th>Descrição</th><th style="width:70px">Qtd.</th><th style="width:100px">Unitário</th><th style="width:90px">Subtotal</th><th></th></tr>'+OI.map(function(i,k){return '<tr><td><input value="'+E(i.desc)+'" oninput="OI['+k+'].desc=this.value;orcTot()" placeholder="Descrição"></td><td><input value="'+(i.qtd?E(i.qtd):'')+'" placeholder="0" inputmode="numeric" oninput="orcQtd('+k+',this.value)"></td><td><input id="ouv'+k+'" value="'+E(String(i.unit).replace('.',','))+'" inputmode="decimal" oninput="OI['+k+'].unit=parseFloat(this.value.replace(\',\',\'.\'))||0;OI['+k+'].man=true;orcTot()"></td><td id="osub'+k+'"><b>'+R((+i.qtd||0)*(+i.unit||0))+'</b></td><td><a style="cursor:pointer;color:#dc2626" onclick="OI.splice('+k+',1);orcRows();orcPrecos()">✕</a></td></tr>'}).join('')+'</table></div>';orcTot()}
+  c.innerHTML='<div class="tw"><table><tr><th>Descrição</th><th style="width:70px">Qtd.</th><th style="width:100px">Unitário</th><th style="width:90px">Subtotal</th><th></th></tr>'+OI.map(function(i,k){return '<tr><td style="display:flex;gap:8px;align-items:center">'+(i.img?'<img src="'+E(i.img)+'" style="width:38px;height:38px;object-fit:cover;border-radius:8px;flex:none" alt="">':'')+'<input value="'+E(i.desc)+'" oninput="OI['+k+'].desc=this.value;orcTot()" placeholder="Descrição"></td><td><input value="'+(i.qtd?E(i.qtd):'')+'" placeholder="0" inputmode="numeric" oninput="orcQtd('+k+',this.value)"></td><td><input id="ouv'+k+'" value="'+E(String(i.unit).replace('.',','))+'" inputmode="decimal" oninput="OI['+k+'].unit=parseFloat(this.value.replace(\',\',\'.\'))||0;OI['+k+'].man=true;orcTot()"></td><td id="osub'+k+'"><b>'+R((+i.qtd||0)*(+i.unit||0))+'</b></td><td><a style="cursor:pointer;color:#dc2626" onclick="OI.splice('+k+',1);orcRows();orcPrecos()">✕</a></td></tr>'}).join('')+'</table></div>';orcTot()}
 function oN(id){var e=$(id);return e?(parseFloat(String(e.value).replace(',','.'))||0):0}
 function orcTot(){var sub=0;OI.forEach(function(i,k){var s=(+i.qtd||0)*(+i.unit||0);sub+=s;var e=$('osub'+k);if(e)e.innerHTML='<b>'+R(s)+'</b>'});
   var t=sub+oN('of1')-oN('of3'),e=$('otot');if(e)e.innerHTML='Subtotal '+R(sub)+(oN('of1')?' · frete '+R(oN('of1')):'')+(oN('of3')?' · desconto − '+R(oN('of3')):'')+' → <b style="font-size:18px">Total '+R(t)+'</b>'}
@@ -308,7 +313,7 @@ async function orcFrete(){var cep=$('oc5').value.replace(/\D/g,''),q=oPlacas()||
 function orcEscolhe(i){var o=OFQ[i];$('of1').value=String(o.preco).replace('.',',');$('of2').value=[o.empresa,o.nome].filter(Boolean).join(' ');orcTot()}
 async function orcSalvar(){
   var body={cliente_nome:$('oc1').value,cliente_tel:$('oc2').value,cliente_doc:$('oc3').value,cliente_email:$('oc4').value,cliente_cep:$('oc5').value,cliente_cidade:$('oc6').value,cliente_uf:$('oc7').value,
-    itens:OI.map(function(i){return {desc:i.desc,qtd:+i.qtd||0,unit:+i.unit||0}}),frete:oN('of1'),frete_desc:$('of2').value,desconto:oN('of3'),validade:$('ov1').value,vendedor:$('ov2').value,obs:$('ov3').value};
+    itens:OI.map(function(i){return {desc:i.desc,qtd:+i.qtd||0,unit:+i.unit||0,img:i.img||''}}),frete:oN('of1'),frete_desc:$('of2').value,desconto:oN('of3'),validade:$('ov1').value,vendedor:$('ov2').value,obs:$('ov3').value};
   try{var r=OEDIT?await api('/admin/orcamentos/'+OEDIT.id,{method:'PUT',body:JSON.stringify(body)}):await api('/admin/orcamentos',{method:'POST',body:JSON.stringify(body)});
     cl();OV=r;draw();loadOrc();toast('Orçamento salvo ✓')}catch(e){alert(e.message)}}
 function toast(m){var t=$('tt');if(!t){t=document.createElement('div');t.id='tt';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#15803d;color:#fff;padding:12px 20px;border-radius:12px;font-weight:600;z-index:40;box-shadow:0 10px 30px #0004;transition:opacity .3s';document.body.appendChild(t)}t.textContent=m;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(function(){t.style.opacity=0},2600)}
