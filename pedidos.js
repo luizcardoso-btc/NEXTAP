@@ -61,7 +61,13 @@ function criarPlacasTeste(resellerId, quantidade) {
 }
 
 // Marca como pago UMA vez (repetir não duplica placas). Devolve true se mudou algo.
-function marcarPago(orderId, { paymentId = null, manual = false, nota = null } = {}) {
+function marcarPago(orderId, opts = {}) {
+  const pago = marcarPagoBase(orderId, opts);
+  // Compra automática da etiqueta (se ligada). Roda depois, sem travar a confirmação do pagamento.
+  if (pago) setImmediate(() => { try { require('./melhor-envio.js').autoComprar(orderId); } catch (e) { console.error('[Melhor Envio] auto:', e.message); } });
+  return pago;
+}
+function marcarPagoBase(orderId, { paymentId = null, manual = false, nota = null } = {}) {
   return db.transaction(() => {
     const r = db.prepare(
       `UPDATE orders SET status='pago', paid_at=datetime('now'), mp_payment_id=COALESCE(?, mp_payment_id),
@@ -229,6 +235,10 @@ function lerRastreio(b) {
 }
 const linkRastreio = codigo => `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(codigo)}`;
 
+// Versão para o revendedor: sem os dados internos da etiqueta (rastreio só aparece quando o envio é liberado).
+const INTERNOS = ['me_id', 'me_servico_id', 'me_etiqueta_url', 'me_status', 'me_rastreio', 'me_liberar', 'me_erro', 'me_tent'];
+function decorarPublico(o) { const x = decorar(o); for (const k of INTERNOS) delete x[k]; return x; }
+
 // Acrescenta ao pedido o que a tela precisa: previsão de envio, atraso e o link de rastreio.
 function decorar(o) {
   const x = { ...o, prazo_producao_dias: PRAZO_PRODUCAO_DIAS };
@@ -253,4 +263,4 @@ async function atualizarTaxas(limite = 80) {
   return r;
 }
 
-module.exports = { atualizarTaxas, decorar, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
+module.exports = { atualizarTaxas, decorar, decorarPublico, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };

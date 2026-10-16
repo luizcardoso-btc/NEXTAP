@@ -220,7 +220,7 @@ router.delete('/sales/:id', (req, res) => {
 // Pedidos do revendedor (histórico)
 router.get('/orders', (req, res) => {
   const orders = db.prepare('SELECT * FROM orders WHERE reseller_id = ? ORDER BY id DESC').all(req.resellerId);
-  res.json(orders.map(pedidos.decorar));
+  res.json(orders.map(pedidos.decorarPublico));
 });
 
 module.exports = router;

@@ -14,7 +14,7 @@ const set = (k, d) => { const r = getSet.get(k); return r ? r.valor : d; };
 const dig = v => String(v ?? '').replace(/\D/g, '');
 const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
 
-const EMBALAGEM = { me_comp: '20', me_larg: '15', me_alt: '5', me_peso_base: '0.1', me_peso_placa: '0.03', me_seguro: '1', me_ie: '', me_tel: '', me_email: '', me_ao_vivo: '1', me_margem: '0', me_pct: '0', me_caixa: '100' };
+const EMBALAGEM = { me_comp: '20', me_larg: '15', me_alt: '5', me_peso_base: '0.1', me_peso_placa: '0.03', me_seguro: '1', me_ie: '', me_tel: '', me_email: '', me_ao_vivo: '1', me_auto: '0', me_margem: '0', me_pct: '0', me_caixa: '100' };
 const embalagem = () => Object.fromEntries(Object.entries(EMBALAGEM).map(([k, d]) => [k, set(k, d)]));
 
 const base = () => (process.env.MELHOR_ENVIO_BASE || (process.env.MELHOR_ENVIO_SANDBOX === '1' ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br')).replace(/\/$/, '');
@@ -159,6 +159,12 @@ async function rastrear(id) {
   const x = j[o.me_id] || {};
   return { codigo: acharRastreio(j, o.me_id), status: x.status || null };
 }
+// Guarda o código no pedido. Ele só vira o rastreio visível (e o pedido "Enviado") quando o envio foi liberado.
+function guardarRastreio(id, codigo) {
+  db.prepare('UPDATE orders SET me_rastreio=? WHERE id=?').run(codigo, id);
+  const o = db.prepare('SELECT status, me_liberar FROM orders WHERE id=?').get(id);
+  if (o && (o.me_liberar === 1 || o.status === 'enviado')) aplicarRastreio(id, codigo);
+}
 function aplicarRastreio(id, codigo) {
   if (db.prepare('SELECT 1 FROM orders WHERE tracking_code=? AND id<>?').get(codigo, id)) return false; // código já usado em outro pedido
   // Marca o pedido como enviado quando o código chega (pagos/em produção).
@@ -167,7 +173,8 @@ function aplicarRastreio(id, codigo) {
   if (r.changes) pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'status_enviado', detalhe: codigo + ' (Melhor Envio)' });
   return r.changes > 0;
 }
-async function comprar(id, servico, docDest, nomeServ) {
+async function comprar(id, servico, docDest, nomeServ, opts = {}) {
+  const liberar = opts.liberar === false ? 0 : 1;
   const o = pedido(id); if (!o) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
   if (!['pago', 'em_producao'].includes(o.status)) throw Object.assign(new Error('Só dá para comprar etiqueta de pedidos pagos que ainda não foram enviados.'), { status: 409 });
   if (o.me_id) throw Object.assign(new Error('Este pedido já tem etiqueta comprada. Use "Atualizar rastreio" ou "Abrir etiqueta".'), { status: 409 });
@@ -178,6 +185,10 @@ async function comprar(id, servico, docDest, nomeServ) {
   const d = o.dest; for (const [k, n] of [['address', 'rua'], ['number', 'número'], ['district', 'bairro'], ['city', 'cidade'], ['state_abbr', 'UF']]) {
     if (!d[k]) throw Object.assign(new Error(`O endereço do pedido está sem ${n}. Complete antes de comprar a etiqueta.`), { status: 400 });
   }
+  // Reserva a compra (evita duas compras ao mesmo tempo para o mesmo pedido).
+  const claim = db.prepare("UPDATE orders SET me_status='comprando', me_erro=NULL, me_liberar=? WHERE id=? AND me_id IS NULL AND (me_status IS NULL OR me_status='falhou')").run(liberar, id);
+  if (!claim.changes) throw Object.assign(new Error('Já existe uma compra de etiqueta em andamento para este pedido.'), { status: 409 });
+  try {
   const c = embalagem(), p = pacote(o), vd = valorDeclarado(o, c);
   const doc = dig(docDest); const para = { ...d }; if (doc.length === 11) para.document = doc; else if (doc.length === 14) para.company_document = doc;
   const nfe = db.prepare('SELECT chave FROM nfe_pedido WHERE order_id = ?').get(id);
@@ -195,8 +206,19 @@ async function comprar(id, servico, docDest, nomeServ) {
   try { compra = await api('POST', '/shipment/checkout', { orders: [meId] }); }
   catch (e) { e.message += ' (A etiqueta ficou no carrinho do Melhor Envio; ajuste o saldo e use "Concluir compra".)'; throw e; }
   const pago = num(compra.purchase && compra.purchase.price) ; const preco = Number.isFinite(pago) ? pago : num(carrinho.price);
-  db.prepare('UPDATE orders SET me_status=? WHERE id=?').run('comprada', id);
-  return finalizar(id, meId, servico, nomeServ || nome(carrinho, compra), preco);
+  db.prepare('UPDATE orders SET me_status=?, custo_frete_real=COALESCE(?, custo_frete_real) WHERE id=?').run('comprada', Number.isFinite(preco) ? preco : null, id);
+  return await finalizar(id, meId, servico, nomeServ || nome(carrinho, compra), preco);
+  } catch (e) {
+    db.prepare("UPDATE orders SET me_erro=?, me_status=CASE WHEN me_id IS NULL THEN 'falhou' ELSE me_status END WHERE id=?").run(String(e.message).slice(0, 300), id);
+    throw e;
+  }
+}
+// Conclui uma etiqueta que ficou no carrinho ou sem geração (por exemplo depois de recarregar o saldo).
+async function concluir(id) {
+  const o = pedido(id); if (!o || !o.me_id) throw Object.assign(new Error('Este pedido não tem etiqueta no carrinho.'), { status: 409 });
+  let preco = NaN;
+  if (o.me_status === 'carrinho') { const c = await api('POST', '/shipment/checkout', { orders: [o.me_id] }); preco = num(c.purchase && c.purchase.price); }
+  return finalizar(o.id, o.me_id, o.me_servico_id, null, preco);
 }
 const nome = (carrinho, compra) => (carrinho && carrinho.service && carrinho.service.name) || (carrinho && carrinho.service_name) || null;
 async function finalizar(id, meId, servicoId, servicoNome, preco) {
@@ -206,7 +228,8 @@ async function finalizar(id, meId, servicoId, servicoNome, preco) {
   db.prepare('UPDATE orders SET me_status=?, me_etiqueta_url=COALESCE(?, me_etiqueta_url), shipping_service=COALESCE(?, shipping_service), custo_frete_real=COALESCE(?, custo_frete_real) WHERE id=?')
     .run('gerada', url, servicoNome ? String(servicoNome).slice(0, 30) : null, Number.isFinite(preco) ? preco : null, id);
   let codigo = null; try { codigo = (await rastrear(id)).codigo; } catch { /* o código pode demorar alguns minutos */ }
-  if (codigo) aplicarRastreio(id, codigo);
+  if (codigo) guardarRastreio(id, codigo);
+  db.prepare('UPDATE orders SET me_erro=NULL, me_tent=0 WHERE id=?').run(id);
   pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'etiqueta_melhor_envio', detalhe: (codigo || 'sem código ainda') });
   const o = pedido(id);
   return { ok: true, codigo, etiqueta_url: o.me_etiqueta_url, custo: o.custo_frete_real, servico: o.shipping_service, order: pedidos.decorar(db.prepare('SELECT * FROM orders WHERE id=?').get(id)) };
@@ -238,7 +261,7 @@ router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
     if (['me_comp', 'me_larg', 'me_alt', 'me_peso_base', 'me_peso_placa'].includes(k)) { const n = num(v); if (!(n > 0)) return res.status(400).json({ error: 'Medidas e pesos precisam ser maiores que zero.' }); v = String(n); }
     if (['me_margem', 'me_pct'].includes(k)) { const n = num(v || '0'); if (!(n >= 0 && n <= 1000)) return res.status(400).json({ error: 'Acréscimo inválido.' }); v = String(n); }
     if (k === 'me_caixa') { const n = parseInt(v, 10); if (!(n >= 1)) return res.status(400).json({ error: 'Placas por caixa inválido.' }); v = String(n); }
-    if (k === 'me_ao_vivo') v = v === '1' || v === 'true' ? '1' : '0';
+    if (k === 'me_ao_vivo' || k === 'me_auto') v = v === '1' || v === 'true' ? '1' : '0';
     if (k === 'me_tel') v = dig(v); if (k === 'me_seguro') v = v === '1' || v === 'true' ? '1' : '0';
     putSet.run(k, v);
   }
@@ -246,19 +269,28 @@ router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
 });
 router.post('/api/admin/orders/:id/melhor-envio/cotar', requireAdmin, async (req, res) => { try { res.json(await cotar(Number(req.params.id))); } catch (e) { erro(res, e); } });
 router.post('/api/admin/orders/:id/melhor-envio/comprar', requireAdmin, async (req, res) => { try { res.json(await comprar(Number(req.params.id), (req.body || {}).servico, (req.body || {}).documento, (req.body || {}).nome)); } catch (e) { erro(res, e); } });
-// Conclui uma etiqueta que ficou no carrinho (por exemplo depois de recarregar o saldo).
 router.post('/api/admin/orders/:id/melhor-envio/concluir', requireAdmin, async (req, res) => {
-  try {
-    const o = pedido(Number(req.params.id)); if (!o || !o.me_id) return res.status(409).json({ error: 'Este pedido não tem etiqueta no carrinho.' });
-    if (o.me_status === 'carrinho') await api('POST', '/shipment/checkout', { orders: [o.me_id] });
-    res.json(await finalizar(o.id, o.me_id, o.me_servico_id, null, NaN));
-  } catch (e) { erro(res, e); }
+  try { await concluir(Number(req.params.id)); res.json({ ok: true, ...(await respostaPedido(Number(req.params.id))) }); } catch (e) { erro(res, e); }
 });
+const respostaPedido = async id => { const o = pedido(id); return { etiqueta_url: o && o.me_etiqueta_url, codigo: o && o.me_rastreio, order: pedidos.decorar(db.prepare('SELECT * FROM orders WHERE id=?').get(id)) }; };
 router.post('/api/admin/orders/:id/melhor-envio/rastrear', requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id), r = await rastrear(id);
-    if (r.codigo) aplicarRastreio(id, r.codigo);
+    if (r.codigo) guardarRastreio(id, r.codigo);
     res.json({ ok: true, codigo: r.codigo, status: r.status, order: pedidos.decorar(db.prepare('SELECT * FROM orders WHERE id=?').get(id)) });
+  } catch (e) { erro(res, e); }
+});
+// Libera o envio: o código guardado vira o rastreio do pedido (o cliente passa a ver) e o pedido fica "Enviado".
+router.post('/api/admin/orders/:id/melhor-envio/liberar', requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id), o = pedido(id);
+    if (!o || !o.me_id) return res.status(409).json({ error: 'Este pedido não tem etiqueta do Melhor Envio.' });
+    if (!['pago', 'em_producao'].includes(o.status)) return res.status(409).json({ error: 'Só dá para liberar o envio de pedidos pagos que ainda não foram enviados.' });
+    let cod = o.me_rastreio; if (!cod) cod = (await rastrear(id)).codigo;
+    if (!cod) return res.status(409).json({ error: 'O Melhor Envio ainda não gerou o código de rastreio. Tente de novo em alguns minutos.' });
+    db.prepare('UPDATE orders SET me_rastreio=?, me_liberar=1 WHERE id=?').run(cod, id);
+    if (!aplicarRastreio(id, cod)) return res.status(409).json({ error: 'Este código de rastreio já foi usado em outro pedido.' });
+    res.json({ ok: true, codigo: cod, order: pedidos.decorar(db.prepare('SELECT * FROM orders WHERE id=?').get(id)) });
   } catch (e) { erro(res, e); }
 });
 router.post('/api/admin/orders/:id/melhor-envio/etiqueta', requireAdmin, async (req, res) => {
@@ -269,4 +301,31 @@ router.post('/api/admin/orders/:id/melhor-envio/etiqueta', requireAdmin, async (
     res.json({ url: pr.url || o.me_etiqueta_url });
   } catch (e) { erro(res, e); }
 });
+// ---------- compra automática ao confirmar o pagamento ----------
+async function autoComprar(id) {
+  if (embalagem().me_auto !== '1' || !token()) return;
+  const o = pedido(id);
+  if (!o || !o.me_servico_id || !['pago', 'em_producao'].includes(o.status)) return;
+  if (o.me_id && !['carrinho', 'comprada'].includes(o.me_status)) return;
+  try {
+    if (o.me_id) await concluir(id); else await comprar(id, o.me_servico_id, '', o.shipping_service, { liberar: false });
+    console.log(`[Melhor Envio] etiqueta comprada automaticamente para o pedido #${id}`);
+  } catch (e) {
+    db.prepare('UPDATE orders SET me_erro=?, me_tent=me_tent+1 WHERE id=?').run(String(e.message).slice(0, 300), id);
+    pedidos.registrarEvento({ origem: 'melhor_envio', order_id: id, resultado: 'etiqueta_auto_falhou', detalhe: String(e.message).slice(0, 200) });
+    console.warn(`[Melhor Envio] compra automática falhou no pedido #${id}:`, e.message);
+  }
+}
+// A cada 5 minutos: tenta de novo as compras que falharam (ex.: sem saldo) e busca rastreios que ainda não saíram.
+async function tentarPendentes() {
+  if (!token() || embalagem().me_auto !== '1') return;
+  const ids = db.prepare(`SELECT id FROM orders WHERE status IN ('pago','em_producao') AND me_servico_id IS NOT NULL AND me_tent < 12
+    AND ((me_id IS NULL AND (me_status IS NULL OR me_status='falhou')) OR me_status IN ('carrinho','comprada')) ORDER BY id LIMIT 5`).all();
+  for (const r of ids) await autoComprar(r.id);
+  const semCodigo = db.prepare("SELECT id FROM orders WHERE status IN ('pago','em_producao') AND me_id IS NOT NULL AND me_status='gerada' AND me_rastreio IS NULL LIMIT 5").all();
+  for (const r of semCodigo) { try { const x = await rastrear(r.id); if (x.codigo) guardarRastreio(r.id, x.codigo); } catch { /* tenta no próximo ciclo */ } }
+}
+setTimeout(() => tentarPendentes().catch(() => {}), 60 * 1000).unref();
+setInterval(() => tentarPendentes().catch(() => {}), 5 * 60 * 1000).unref();
+router.autoComprar = autoComprar; router.tentarPendentes = tentarPendentes;
 module.exports = router;

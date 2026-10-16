@@ -403,6 +403,13 @@ CREATE TABLE IF NOT EXISTS sales (
     ALTER TABLE orders ADD COLUMN me_status TEXT;
     CREATE INDEX IF NOT EXISTS idx_orders_me ON orders(me_id);
   `),
+  // v17 — compra automática da etiqueta: rastreio guardado (oculto até liberar o envio), erro e tentativas. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN me_rastreio TEXT;
+    ALTER TABLE orders ADD COLUMN me_liberar INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN me_erro TEXT;
+    ALTER TABLE orders ADD COLUMN me_tent INTEGER NOT NULL DEFAULT 0;
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
