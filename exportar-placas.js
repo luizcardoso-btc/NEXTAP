@@ -41,21 +41,22 @@ function zip(arquivos) { // [{nome, dados:Buffer}]
   return Buffer.concat([...partes, cd, fim]);
 }
 
+// 1 QR Code por página (A4, QR grande e centralizado, número em destaque embaixo)
 function pdf(placas, titulo) {
   return new Promise((ok, falha) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 30, info: { Title: titulo } }), bufs = [];
+    const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: titulo } }), bufs = [];
     doc.on('data', b => bufs.push(b)); doc.on('end', () => ok(Buffer.concat(bufs))); doc.on('error', falha);
-    const COL = 4, LIN = 5, W = (595.28 - 60) / COL, H = (841.89 - 90) / LIN, QR = 112;
+    const PW = 595.28, PH = 841.89, QR = 400;
     placas.forEach((p, i) => {
-      const k = i % (COL * LIN);
-      if (i && k === 0) doc.addPage();
-      if (k === 0) doc.font('Helvetica-Bold').fontSize(10).fillColor('#444').text(`${titulo} — página ${Math.floor(i / (COL * LIN)) + 1}`, 30, 24, { width: 535 });
-      const x = 30 + (k % COL) * W, y = 50 + Math.floor(k / COL) * H, m = matriz(p.url), cel = QR / (m.length + 8), ox = x + (W - QR) / 2, oy = y + 4;
+      if (i) doc.addPage();
+      const m = matriz(p.url), cel = QR / (m.length + 8), ox = (PW - QR) / 2, oy = 150;
+      doc.font('Helvetica').fontSize(9).fillColor('#666').text(`${titulo} — ${i + 1} de ${placas.length}`, 0, 40, { width: PW, align: 'center' });
       doc.rect(ox, oy, QR, QR).fill('#fff');
       doc.fillColor('#000');
-      m.forEach((lin, r) => lin.forEach((v, c) => { if (v) doc.rect(ox + (c + 4) * cel, oy + (r + 4) * cel, cel + 0.15, cel + 0.15).fill(); }));
-      doc.font('Helvetica-Bold').fontSize(15).fillColor('#000').text(p.numero, x, oy + QR + 2, { width: W, align: 'center' });
-      doc.font('Helvetica').fontSize(6.5).fillColor('#555').text(p.url.replace(/^https?:\/\//, ''), x, oy + QR + 20, { width: W, align: 'center' });
+      m.forEach((lin, r) => lin.forEach((v, c) => { if (v) doc.rect(ox + (c + 4) * cel, oy + (r + 4) * cel, cel + 0.2, cel + 0.2).fill(); }));
+      doc.font('Helvetica-Bold').fontSize(64).fillColor('#000').text(p.numero, 0, oy + QR + 20, { width: PW, align: 'center' });
+      doc.font('Helvetica').fontSize(16).fillColor('#333').text(`Placa ${p.cor}`, 0, oy + QR + 100, { width: PW, align: 'center' });
+      doc.font('Helvetica').fontSize(9).fillColor('#777').text(p.url.replace(/^https?:\/\//, ''), 0, oy + QR + 128, { width: PW, align: 'center' });
     });
     doc.end();
   });
@@ -65,7 +66,7 @@ const arq = n => String(n).replace('#', '');
 // Monta o ZIP do fornecedor (CSV + PDF + SVG por placa). placas: [{numero,url,cor,pedido,data}]
 async function montarZip(placas, { titulo, intro }) {
   const csv = '\uFEFF' + ['numero;cor;pedido;data;link_qr_dinamico'].concat(placas.map(p => [p.numero, p.cor, p.pedido || '', p.data || '', p.url].join(';'))).join('\r\n') + '\r\n';
-  const leia = `NexTap — arquivo para o fornecedor\r\n\r\n${intro}\r\nPlacas: ${placas[0].numero} a ${placas[placas.length - 1].numero} (${placas.length} placas)\r\n- placas.csv: numeração, cor e link de cada placa (abre no Excel)\r\n- placas-qr.pdf: QR Code + número de cada placa, 20 por página (vetorial)\r\n- svg/: um QR Code vetorial por placa, nomeado pelo número (ex.: 00001.svg)\r\n\r\nO QR é dinâmico: leva ao link fixo da placa e o destino é trocado no painel, sem regravar nada.\r\nGerado em ${new Date().toISOString().slice(0, 10)}.\r\n`;
+  const leia = `NexTap — arquivo para o fornecedor\r\n\r\n${intro}\r\nPlacas: ${placas[0].numero} a ${placas[placas.length - 1].numero} (${placas.length} placas)\r\n- placas.csv: numeração, cor e link de cada placa (abre no Excel)\r\n- placas-qr.pdf: QR Code + número de cada placa, 1 QR por página (vetorial)\r\n- svg/: um QR Code vetorial por placa, nomeado pelo número (ex.: 00001.svg)\r\n\r\nO QR é dinâmico: leva ao link fixo da placa e o destino é trocado no painel, sem regravar nada.\r\nGerado em ${new Date().toISOString().slice(0, 10)}.\r\n`;
   const lista = [{ nome: 'placas.csv', dados: Buffer.from(csv, 'utf8') }, { nome: 'placas-qr.pdf', dados: await pdf(placas, titulo) }, { nome: 'LEIA-ME.txt', dados: Buffer.from(leia, 'utf8') }]
     .concat(placas.map(p => ({ nome: `svg/${arq(p.numero)}.svg`, dados: Buffer.from(svg(p.url, p.numero), 'utf8') })));
   return zip(lista);
