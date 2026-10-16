@@ -81,8 +81,9 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <div class="qty"><span><i class="dot" style="background:#1d4ed8"></i>Placa Azul</span><span><button onclick="q('azul',-1)">−</button><b id="qa" style="min-width:34px;text-align:center">25</b><button onclick="q('azul',1)">+</button></span></div>
 <div class="qty"><span><i class="dot" style="background:#111"></i>Placa Preta</span><span><button onclick="q('preta',-1)">−</button><b id="qp" style="min-width:34px;text-align:center">25</b><button onclick="q('preta',1)">+</button></span></div>
 <div class="sum"><div><span>Quantidade</span><b id="sq"></b></div><div><span>Por placa</span><b id="su"></b></div><div class="t"><span>Total</span><span id="st"></span></div><small class="mut" id="sf"></small><small class="mut" id="sh"></small></div>
+<div id="fz" style="margin-top:12px"><label style="font-size:13px;font-weight:600">Calcular o frete pelo CEP de entrega<div style="display:flex;gap:8px;margin-top:6px"><input id="fcep" inputmode="numeric" maxlength="9" placeholder="00000-000" autocomplete="postal-code" style="flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit"><button type="button" class="btn" id="fbtn">Calcular</button></div></label><div id="fop" style="margin-top:8px"></div></div>
 <a class="btn p" style="width:100%;text-align:center;display:block" id="lnkCriar3" href="#">Criar conta grátis para fazer esse pedido</a>
-<small class="mut">Pedido mínimo de 5 placas · frete fixo por pedido · Pix ou cartão de crédito pelo Mercado Pago · já tem conta? <a id="lnkEntrar2" href="#" style="color:var(--pr2);font-weight:700">Entrar</a></small></div></div></div></section>
+<small class="mut">Pedido mínimo de 5 placas · frete calculado pelo CEP · Pix ou cartão de crédito pelo Mercado Pago · já tem conta? <a id="lnkEntrar2" href="#" style="color:var(--pr2);font-weight:700">Entrar</a></small></div></div></div></section>
 
 <section class="s" id="faq"><div class="w" style="max-width:760px"><div class="c"><span class="tag">FAQ</span><h2>Perguntas frequentes</h2></div><br>
 <details><summary>Existe pedido mínimo?</summary><p class="mut" id="faqMin">Sim. O pedido mínimo é de 5 placas (azuis, pretas ou as duas juntas), feito direto no seu painel.</p></details>
@@ -113,7 +114,7 @@ function theme(){var r=document.documentElement,d=r.dataset.theme==='dark'||(!r.
 function renderTiers(){
 document.getElementById('tiers').innerHTML=TIERS.map(function(t,i){var last=i===TIERS.length-1;return '<div class="'+(last?'best':'')+'"><span>'+tl(t)+(last?' <span class="tag">MELHOR PREÇO</span>':'')+'</span><b>'+R(t[2])+'</b></div>'}).join('');
 document.getElementById('tagLow').textContent='ATACADO · A PARTIR DE '+R(TIERS[TIERS.length-1][2])+' POR PLACA';
-document.getElementById('freteNota').textContent=FRETE>0?'📦 + frete fixo de '+R(FRETE)+' por pedido, para todo o Brasil.':'📦 Frete grátis em todos os pedidos.';
+document.getElementById('freteNota').textContent='📦 + frete calculado pelo seu CEP (Correios e transportadoras), direto no simulador ao lado.';
 document.getElementById('faqMin').textContent='Sim. O pedido mínimo é de '+MINQ+' placas (azuis, pretas ou as duas juntas), feito direto no seu painel.'}
 renderTiers();
 (async function(){try{var r=await fetch(API_BASE+'/public/price-tiers');var j=await r.json();
@@ -122,9 +123,27 @@ document.getElementById('wal').href='https://wa.me/'+WHATS;
 ['lnkEntrar','lnkEntrar2'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=login'});
 ['lnkCriar','lnkCriar2','lnkCriar3'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=registro'});
 function q(c,d){N[c]=Math.max(0,N[c]+d);calc()}
-function calc(){var n=N.azul+N.preta,u=n?price(n):0;qa.textContent=N.azul;qp.textContent=N.preta;sq.textContent=n;su.textContent=R(u);st.textContent=R(n?n*u+FRETE:0);sf.textContent=n?'Placas '+R(n*u)+' + frete fixo '+R(FRETE)+' (por pedido)':'';
+function calc(){var n=N.azul+N.preta,u=n?price(n):0;qa.textContent=N.azul;qp.textContent=N.preta;sq.textContent=n;su.textContent=R(u);st.textContent=R(n?n*u+FRETE:0);sf.textContent=n?'Placas '+R(n*u)+' + '+freteRot()+' '+R(FRETE)+' (por pedido)':'';
 var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=n<MINQ?'Pedido mínimo: '+MINQ+' placas'+(n?' — faltam '+(MINQ-n)+'.':'.'):nx?'Com mais '+(nx[0]-n)+', cada placa sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
 calc();
+/* frete ao vivo (Melhor Envio) */
+var FQ={cep:'',qtd:0,ops:[],sel:null,busy:false};
+function freteRot(){return FQ&&FQ.sel?'frete '+FQ.sel.nome:'frete estimado (informe o CEP)'}
+function nQ(){return N.azul+N.preta+(typeof pricedQty==='function'?pricedQty():0)}
+function pintaFrete(){var b=document.getElementById('fop');if(!b)return;
+if(FQ.busy){b.innerHTML='<small class="mut">Calculando frete…</small>';return}
+if(!FQ.ops.length){b.innerHTML='';return}
+b.innerHTML=FQ.ops.map(function(o,i){return '<label style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--br);font-size:14px"><input type="radio" name="fsv" '+(FQ.sel&&FQ.sel.id===o.id?'checked':'')+' onchange="escolheFrete('+i+')"><span style="flex:1">'+o.nome+(o.prazo?' <small class="mut">· '+o.prazo+' dia(s) úteis</small>':'')+'</span><b>'+R(o.preco)+'</b></label>'}).join('')}
+function escolheFrete(i){FQ.sel=FQ.ops[i];FRETE=FQ.sel.preco;calc();pintaFrete()}
+async function cotaFrete(){var d=document.getElementById('fcep').value.replace(/\D/g,''),n=nQ();
+if(d.length!==8||!n){return}
+FQ.cep=d;FQ.qtd=n;FQ.busy=true;pintaFrete();
+try{var r=await fetch(API_BASE+'/frete/cotar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cep:d,qtd:n})});var j=await r.json();
+if(!r.ok)throw new Error(j.error||'erro');FQ.ops=j.opcoes||[];FQ.sel=FQ.ops[0]||null;if(FQ.sel)FRETE=FQ.sel.preco}catch(e){FQ.ops=[];FQ.sel=null}
+FQ.busy=false;pintaFrete();calc()}
+document.getElementById('fbtn').onclick=cotaFrete;
+document.getElementById('fcep').addEventListener('input',function(){var v=this.value.replace(/\D/g,'').slice(0,8);this.value=v.length>5?v.slice(0,5)+'-'+v.slice(5):v;if(v.length===8)cotaFrete()});
+setInterval(function(){if(FQ.cep&&!FQ.busy&&nQ()&&nQ()!==FQ.qtd)cotaFrete()},1500);
 
 /* contadores — mostra o maior valor entre o número real (quando o backend responder) e o piso de marketing abaixo */
 var MIN_PLACAS=5000, MIN_REVS=250;

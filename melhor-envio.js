@@ -14,7 +14,7 @@ const set = (k, d) => { const r = getSet.get(k); return r ? r.valor : d; };
 const dig = v => String(v ?? '').replace(/\D/g, '');
 const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
 
-const EMBALAGEM = { me_comp: '20', me_larg: '15', me_alt: '5', me_peso_base: '0.1', me_peso_placa: '0.03', me_seguro: '1', me_ie: '', me_tel: '', me_email: '' };
+const EMBALAGEM = { me_comp: '20', me_larg: '15', me_alt: '5', me_peso_base: '0.1', me_peso_placa: '0.03', me_seguro: '1', me_ie: '', me_tel: '', me_email: '', me_ao_vivo: '1', me_margem: '0', me_pct: '0', me_caixa: '100' };
 const embalagem = () => Object.fromEntries(Object.entries(EMBALAGEM).map(([k, d]) => [k, set(k, d)]));
 
 const base = () => (process.env.MELHOR_ENVIO_BASE || (process.env.MELHOR_ENVIO_SANDBOX === '1' ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br')).replace(/\/$/, '');
@@ -69,29 +69,83 @@ function pedido(id) {
   o.qtd = (o.qty_azul || 0) + (o.qty_preta || 0);
   return o;
 }
-function pacote(o) {
-  const c = embalagem();
-  const peso = Math.max(0.1, +(num(c.me_peso_base) + num(c.me_peso_placa) * o.qtd).toFixed(3));
+const pacotesDe = qtd => Math.max(1, Math.ceil(qtd / Math.max(1, parseInt(embalagem().me_caixa, 10) || 100)));
+function pacoteQtd(qtd) {
+  const c = embalagem(), n = Math.ceil(qtd / pacotesDe(qtd));
+  const peso = Math.max(0.1, +(num(c.me_peso_base) + num(c.me_peso_placa) * n).toFixed(3));
   return { width: num(c.me_larg), height: num(c.me_alt), length: num(c.me_comp), weight: peso };
 }
+const pacote = o => pacoteQtd(o.qtd);
 const valorDeclarado = (o, c) => (c.me_seguro === '1' ? Math.max(1, +(o.unit_price * o.qtd).toFixed(2)) : 0);
+function precoUnit(qtd) {
+  const t = db.prepare('SELECT * FROM price_tiers ORDER BY min_qty').all();
+  const f = t.find(x => qtd >= x.min_qty && qtd <= x.max_qty);
+  return f ? f.unit_price : (t.length ? (qtd > t[t.length - 1].max_qty ? t[t.length - 1].unit_price : t[0].unit_price) : 25);
+}
 
 // ---------- cotação ----------
-async function cotar(id, docDest) {
+// Devolve os serviços disponíveis para um CEP e uma quantidade de placas (preço do Melhor Envio, já somando todas as caixas).
+async function cotarRaw(cepDest, qtd, valorUnit) {
+  const rem = remetente(); if (rem.postal_code.length !== 8) throw Object.assign(new Error('Preencha o CEP do remetente em Melhor Envio > Configurar (ou em Declaração).'), { status: 400 });
+  const np = pacotesDe(qtd), pq = pacoteQtd(qtd), c = embalagem();
+  const seguro = c.me_seguro === '1' ? Math.max(1, +(valorUnit * Math.ceil(qtd / np)).toFixed(2)) : 0;
+  const j = await api('POST', '/shipment/calculate', {
+    from: { postal_code: rem.postal_code }, to: { postal_code: cepDest },
+    products: [{ id: 'pedido', width: pq.width, height: pq.height, length: pq.length, weight: pq.weight, insurance_value: seguro, quantity: 1 }],
+  });
+  const opcoes = (Array.isArray(j) ? j : []).map(s => ({
+    id: s.id, nome: s.name, empresa: s.company && s.company.name, erro: s.error || null,
+    preco: +(num(s.custom_price ?? s.price) * np).toFixed(2), prazo: s.custom_delivery_time ?? s.delivery_time, precisa_agencia: /latam|azul|buslog/i.test((s.company && s.company.name) || ''),
+  })).filter(s => !s.erro && Number.isFinite(s.preco) && s.preco > 0 && !s.precisa_agencia).sort((a, b) => a.preco - b.preco);
+  return { pacote: pq, pacotes: np, opcoes };
+}
+async function cotar(id) {
   const o = pedido(id); if (!o) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
   if (o.dest.postal_code.length !== 8) throw Object.assign(new Error('O pedido não tem CEP de entrega válido.'), { status: 400 });
-  const rem = remetente(); if (rem.postal_code.length !== 8) throw Object.assign(new Error('Preencha o CEP do remetente em Melhor Envio > Configurar (ou em Declaração).'), { status: 400 });
-  const p = pacote(o), c = embalagem();
-  const j = await api('POST', '/shipment/calculate', {
-    from: { postal_code: rem.postal_code }, to: { postal_code: o.dest.postal_code },
-    products: [{ id: 'pedido-' + id, width: p.width, height: p.height, length: p.length, weight: p.weight, insurance_value: valorDeclarado(o, c), quantity: 1 }],
-  });
-  const lista = (Array.isArray(j) ? j : []).map(s => ({
-    id: s.id, nome: s.name, empresa: s.company && s.company.name, erro: s.error || null,
-    preco: num(s.custom_price ?? s.price), prazo: s.custom_delivery_time ?? s.delivery_time, precisa_agencia: /latam|azul|buslog/i.test((s.company && s.company.name) || ''),
-  })).filter(s => !s.erro && Number.isFinite(s.preco) && !s.precisa_agencia).sort((a, b) => a.preco - b.preco);
-  return { pacote: p, opcoes: lista, valor_cobrado: o.shipping_fee || 0 };
+  const r = await cotarRaw(o.dest.postal_code, o.qtd, o.unit_price);
+  return { ...r, valor_cobrado: o.shipping_fee || 0, servico_pedido: o.me_servico_id || null, servico_pedido_nome: o.shipping_service || null };
 }
+
+// ---------- frete no checkout (cliente / revendedor) ----------
+const cacheFrete = new Map();
+const aoVivo = () => !!token() && embalagem().me_ao_vivo === '1' && remetente().postal_code.length === 8;
+const comAcrescimo = p => { const c = embalagem(); return +(p * (1 + (num(c.me_pct) || 0) / 100) + (num(c.me_margem) || 0)).toFixed(2); };
+const MAX_OPCOES = 4;
+// Opções de frete para mostrar ao comprador. Se o Melhor Envio estiver fora do ar ou desligado, cai no frete fixo.
+async function opcoesFrete(cep, qtd) {
+  const fixo = { origem: 'fixo', opcoes: [{ id: 0, nome: 'Frete fixo', empresa: null, preco: db.freteFixo(), prazo: null }] };
+  cep = dig(cep); qtd = Math.floor(Number(qtd));
+  if (cep.length !== 8 || !(qtd >= 1)) return fixo;
+  if (!aoVivo()) return fixo;
+  const chave = cep + '|' + qtd + '|' + Object.values(embalagem()).join(','), hit = cacheFrete.get(chave);
+  if (hit && Date.now() - hit.t < 15 * 60 * 1000) return hit.d;
+  try {
+    const r = await cotarRaw(cep, qtd, precoUnit(qtd));
+    if (!r.opcoes.length) return { ...fixo, aviso: 'Sem frete disponível para este CEP; usando o frete fixo.' };
+    const d = { origem: 'melhor_envio', pacotes: r.pacotes, opcoes: r.opcoes.slice(0, MAX_OPCOES).map(o => ({ id: o.id, nome: o.nome, empresa: o.empresa, prazo: o.prazo, preco: comAcrescimo(o.preco) })) };
+    cacheFrete.set(chave, { t: Date.now(), d }); if (cacheFrete.size > 500) cacheFrete.delete(cacheFrete.keys().next().value);
+    return d;
+  } catch (e) { console.warn('[Melhor Envio] cotação falhou, usando frete fixo:', e.message); return { ...fixo, aviso: 'Não consegui calcular o frete agora; usando o frete fixo.' }; }
+}
+// Escolhe o frete que será cobrado no pedido (o servidor recalcula; nunca confia no valor vindo da tela).
+async function resolverFrete(cep, qtd, servicoId) {
+  const r = await opcoesFrete(cep, qtd);
+  const o = r.opcoes.find(x => String(x.id) === String(servicoId)) || r.opcoes[0];
+  return { preco: o.preco, nome: [o.empresa, o.nome].filter(Boolean).join(' ').slice(0, 30), servicoId: r.origem === 'fixo' ? null : o.id, origem: r.origem };
+}
+const limite = new Map();
+function limitar(req, res, next) {
+  const k = req.ip, agora = Date.now(), L = (limite.get(k) || []).filter(t => agora - t < 60000);
+  if (L.length >= 20) return res.status(429).json({ error: 'Muitas consultas. Tente de novo em instantes.' });
+  L.push(agora); limite.set(k, L); if (limite.size > 2000) limite.clear(); next();
+}
+router.post('/api/frete/cotar', limitar, async (req, res) => {
+  const b = req.body || {}, qtd = Math.floor(Number(b.qtd));
+  if (dig(b.cep).length !== 8) return res.status(400).json({ error: 'Informe o CEP com 8 números.' });
+  if (!(qtd >= 1 && qtd <= 100000)) return res.status(400).json({ error: 'Informe a quantidade de placas.' });
+  res.json(await opcoesFrete(b.cep, qtd));
+});
+router.opcoesFrete = opcoesFrete; router.resolverFrete = resolverFrete;
 
 // ---------- compra ----------
 const primeiro = v => (Array.isArray(v) ? v[0] : v);
@@ -117,6 +171,7 @@ async function comprar(id, servico, docDest, nomeServ) {
   const o = pedido(id); if (!o) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
   if (!['pago', 'em_producao'].includes(o.status)) throw Object.assign(new Error('Só dá para comprar etiqueta de pedidos pagos que ainda não foram enviados.'), { status: 409 });
   if (o.me_id) throw Object.assign(new Error('Este pedido já tem etiqueta comprada. Use "Atualizar rastreio" ou "Abrir etiqueta".'), { status: 409 });
+  if (pacotesDe(o.qtd) > 1) throw Object.assign(new Error(`Este pedido tem ${o.qtd} placas e precisa de ${pacotesDe(o.qtd)} caixas (limite de ${embalagem().me_caixa} placas por caixa). Compre as etiquetas no painel do Melhor Envio e informe o rastreio aqui.`), { status: 409 });
   servico = parseInt(servico, 10); if (!servico) throw Object.assign(new Error('Escolha o serviço de frete.'), { status: 400 });
   const rem = remetente(), falta = faltaRemetente(rem);
   if (falta.length) throw Object.assign(new Error('Complete os dados do remetente: ' + falta.join(', ') + '.'), { status: 400 });
@@ -181,6 +236,9 @@ router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
   for (const k of Object.keys(EMBALAGEM)) if (b[k] !== undefined) {
     let v = String(b[k]).trim().slice(0, 80);
     if (['me_comp', 'me_larg', 'me_alt', 'me_peso_base', 'me_peso_placa'].includes(k)) { const n = num(v); if (!(n > 0)) return res.status(400).json({ error: 'Medidas e pesos precisam ser maiores que zero.' }); v = String(n); }
+    if (['me_margem', 'me_pct'].includes(k)) { const n = num(v || '0'); if (!(n >= 0 && n <= 1000)) return res.status(400).json({ error: 'Acréscimo inválido.' }); v = String(n); }
+    if (k === 'me_caixa') { const n = parseInt(v, 10); if (!(n >= 1)) return res.status(400).json({ error: 'Placas por caixa inválido.' }); v = String(n); }
+    if (k === 'me_ao_vivo') v = v === '1' || v === 'true' ? '1' : '0';
     if (k === 'me_tel') v = dig(v); if (k === 'me_seguro') v = v === '1' || v === 'true' ? '1' : '0';
     putSet.run(k, v);
   }
