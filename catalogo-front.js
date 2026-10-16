@@ -89,6 +89,8 @@
   var EX = [], PREV = null, QPAD = 25; // EX = itens escolhidos no catálogo (além das placas azul/preta)
   function exF(id) { for (var i = 0; i < EX.length; i++) if (EX[i].id === id) return EX[i]; return null; }
   function pricedQty() { return EX.reduce(function (a, e) { return a + (e.usa_tabela ? e.qty : 0); }, 0); }
+  var temFrete = function () { return !!(window.FQ && FQ.sel); };
+  var fv = function (t) { return temFrete() ? R(t.frete) : 'calculado pelo CEP'; };
   function totais() {
     var n = N.azul + N.preta + pricedQty(), u = n ? price(n) : 0, min = typeof minQ === 'function' ? minQ() : MINQ;
     return { n: n, u: u, placas: n * u, frete: n ? FRETE : 0, total: n ? n * u + FRETE : 0, min: min };
@@ -105,7 +107,7 @@
     var t = totais(), L = ['Olá! Quero fazer este pedido:'];
     if (N.azul) L.push('• ' + N.azul + 'x Placa azul'); if (N.preta) L.push('• ' + N.preta + 'x Placa preta');
     EX.forEach(function (e) { L.push('• ' + e.qty + 'x ' + e.nome + (e.usa_tabela ? '' : ' (preço a combinar)')); });
-    if (t.n) L.push('Placas: ' + t.n + ' × ' + R(t.u) + ' = ' + R(t.placas) + ' + frete ' + R(t.frete) + ' = ' + R(t.total));
+    if (t.n) L.push('Placas: ' + t.n + ' × ' + R(t.u) + ' = ' + R(t.placas) + ' + frete ' + fv(t) + (temFrete() ? ' = ' + R(t.total) : ' (total sem frete: ' + R(t.total) + ')'));
     return L.join('\n');
   }
   function zapUrl() { return 'https://wa.me/' + (typeof WHATS !== 'undefined' ? WHATS : '') + '?text=' + encodeURIComponent(zapTexto()); }
@@ -145,7 +147,7 @@
       var t = totais();
       sq.textContent = t.n; su.textContent = R(t.u); st.textContent = R(t.total);
       var sem = EX.some(function (e) { return !e.usa_tabela; });
-      sf.textContent = t.n ? 'Placas ' + R(t.placas) + ' + ' + (window.freteRot ? freteRot() : 'frete fixo') + ' ' + R(t.frete) + ' (por pedido)' + (sem ? ' · displays: preço em breve' : '') : (sem ? 'Displays: preço em breve' : '');
+      sf.textContent = t.n ? 'Placas ' + R(t.placas) + ' + ' + (temFrete() ? freteRot() + ' ' + R(t.frete) : 'frete calculado pelo CEP') + ' (por pedido)' + (sem ? ' · displays: preço em breve' : '') : (sem ? 'Displays: preço em breve' : '');
       var nx = (window.TIERS || []).filter(function (x) { return x[0] > t.n; })[0]; // faixas da LP: [min, max, preço]
       sh.textContent = t.n && t.n < MINQ ? 'Pedido mínimo: ' + MINQ + ' placas — faltam ' + (MINQ - t.n) + '.' : (t.n && nx ? 'Com mais ' + (nx[0] - t.n) + ', cada placa sai por ' + R(nx[2]) + '.' : (t.n ? 'Você já tem o melhor preço!' : ''));
     };
@@ -164,7 +166,7 @@
     if (preta) preta.insertAdjacentHTML('afterend', linhasHtml());
     var t = totais();
     function set(l, v) { [].slice.call(card.querySelectorAll('.qty')).forEach(function (r) { if (r.firstElementChild && r.firstElementChild.textContent.trim() === l) r.lastElementChild.textContent = v; }); }
-    set('Quantidade', t.n); set('Por placa', R(t.u)); set('Placas', R(t.placas)); set('Frete (envio)', R(t.frete)); set('Total', R(t.total));
+    set('Quantidade', t.n); set('Por placa', R(t.u)); set('Placas', R(t.placas)); set('Frete (envio)', fv(t)); set('Total', R(t.total) + (temFrete() ? '' : ' + frete'));
     var btn = card.querySelector('button.btn.p'), aviso = card.querySelector('p[style*="b45309"]');
     if (aviso) aviso.remove();
     if (btn) {
