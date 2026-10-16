@@ -193,8 +193,13 @@ var fm='<div class="card"><b>Embalagem e dados</b><p class="mut" style="margin:4
 +'<div class="row" style="flex-wrap:wrap">'+f('tel','Telefone do remetente','75999999999')+f('ie','Inscrição estadual (só se tiver CNPJ)','ISENTO ou número')+f('email','E-mail de contato da conta','voce@email.com')+'</div>'
 +'<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="me_seguro" '+(c.me_seguro==='1'?'checked':'')+' style="width:auto"> Declarar o valor das placas como seguro (aumenta um pouco o frete)</label>'
 +'<div class="row"><button class="btn p" onclick="salvarMe()">Salvar</button></div></div>';
+var tst='<div class="card"><b>Testar conexão</b><p class="mut" style="margin:4px 0 8px">Mostra qual endereço e qual token o sistema está usando e se o Melhor Envio aceita.</p><div class="row"><button class="btn p" onclick="testarMe()">Testar conexão</button></div><div id="metst" style="margin-top:8px;overflow-wrap:anywhere"></div></div>';
 var ajuda='<div class="card"><b>Como ligar</b><ol class="mut" style="margin:6px 0 0 18px;padding:0"><li>No Melhor Envio: Menu do perfil → Configurações → Tokens → gere um token com permissões de carrinho, compra, geração e impressão de etiquetas, cotação e rastreio.</li><li>No Railway, crie a variável <b>MELHOR_ENVIO_TOKEN</b> com o token (e <b>MELHOR_ENVIO_SANDBOX=1</b> para testar antes).</li><li>Mantenha saldo na carteira do Melhor Envio: a compra da etiqueta debita desse saldo.</li><li>Em <b>Pedidos</b>, abra um pedido pago → <b>Enviar</b> → <b>Cotar no Melhor Envio</b>.</li></ol></div>';
-return st+fm+ajuda}
+return st+tst+fm+ajuda}
+async function testarMe(){var b=$('metst');b.innerHTML='<span class="mut">Testando…</span>';
+try{var r=await api('/admin/melhor-envio/testar',{method:'POST'});
+var d='<div class="mut">Endereço: <b>'+E(r.ambiente)+'</b><br>Token: '+r.token_tamanho+' caracteres'+(r.token_tamanho?' · começa com <b>'+E(r.token_inicio)+'</b> · termina com <b>'+E(r.token_fim)+'</b>':'')+(r.sandbox_var?'<br>MELHOR_ENVIO_SANDBOX = '+E(r.sandbox_var):'')+'</div>';
+b.innerHTML=(r.ok?'<div style="color:#15803d"><b>✅ Conectado</b>'+(r.nome?' como '+E(r.nome):'')+(r.email?' ('+E(r.email)+')':'')+(r.saldo!=null?' · saldo '+R(r.saldo):'')+'</div>':'<div style="color:#dc2626"><b>❌ '+E(r.erro||'Falhou')+'</b></div>')+d}catch(e){b.innerHTML='<div style="color:#dc2626">'+E(e.message)+'</div>'}}
 async function salvarMe(){var b={};['comp','larg','alt','peso_base','peso_placa','tel','ie','email'].forEach(function(k){b['me_'+k]=$('me_'+k).value});b.me_seguro=$('me_seguro').checked?'1':'0';
 try{await api('/admin/melhor-envio',{method:'PUT',body:JSON.stringify(b)});toast('Salvo ✓');loadMe()}catch(e){alert(e.message)}}
 function meBloco(o){

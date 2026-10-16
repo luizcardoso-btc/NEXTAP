@@ -165,6 +165,17 @@ router.get('/api/admin/melhor-envio', requireAdmin, (req, res) => {
   res.json({ token: !!token(), sandbox: process.env.MELHOR_ENVIO_SANDBOX === '1', remetente_ok: faltas().length === 0, faltando: faltas(),
     remetente: { nome: rem.name, documento: rem.document || rem.company_document || '', cep: rem.postal_code, cidade: rem.city, uf: rem.state_abbr }, config: embalagem() });
 });
+// Diagnóstico: mostra qual endereço e qual token (mascarado) o sistema está usando e se o Melhor Envio aceita.
+router.post('/api/admin/melhor-envio/testar', requireAdmin, async (req, res) => {
+  const t = token();
+  const info = { ambiente: base(), token_tamanho: t.length, token_inicio: t.slice(0, 6), token_fim: t.slice(-4), sandbox_var: process.env.MELHOR_ENVIO_SANDBOX || '' };
+  if (!t) return res.json({ ok: false, ...info, erro: 'A variável MELHOR_ENVIO_TOKEN não chegou ao sistema (vazia). Confirme se foi criada no serviço certo do Railway e se o deploy terminou.' });
+  try {
+    const u = await api('GET', '');
+    let saldo = null; try { const s = await api('GET', '/balance'); saldo = s.balance ?? null; } catch { /* opcional */ }
+    res.json({ ok: true, ...info, nome: [u.firstname, u.lastname].filter(Boolean).join(' ') || u.name || null, email: u.email || null, saldo });
+  } catch (e) { res.json({ ok: false, ...info, erro: e.message, status: e.status }); }
+});
 router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
   const b = req.body || {}, ant = embalagem();
   for (const k of Object.keys(EMBALAGEM)) if (b[k] !== undefined) {
