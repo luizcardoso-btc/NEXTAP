@@ -43,7 +43,7 @@ main{padding:24px;min-width:0}.top{display:flex;justify-content:space-between;ga
 
 <div id="app">
 <aside><a class="logo lgc" href="/" aria-label="NexTap"><img src="/logo.png" alt="NexTap" class="lg"></a><small style="margin-top:4px">PAINEL ADMIN · FORNECEDOR</small>
-<small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a><a data-v="gl" onclick="nav('gl')">⭐ Link de Avaliação</a><a data-v="bs" onclick="nav('bs')">🌐 Biosites</a><a data-v="qr" onclick="nav('qr')">📦 QR em estoque</a><a data-v="me" onclick="nav('me')">🚚 Melhor Envio</a>
+<small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a><a data-v="gl" onclick="nav('gl')">⭐ Link de Avaliação</a><a data-v="bs" onclick="nav('bs')">🌐 Biosites</a><a data-v="qr" onclick="nav('qr')">📦 QR em estoque</a><a data-v="me" onclick="nav('me')">🚚 Melhor Envio</a><a data-v="orc" onclick="nav('orc')">🧾 Orçamentos</a>
 <small>DOCUMENTOS</small><a data-v="decl" onclick="nav('decl')" style="background:#15803d;color:#fff;font-weight:700">🧾 Declaração e NF-e</a><a href="/admin/catalogo" style="font-weight:700">🛍 Catálogo de produtos</a>
 <small>GESTÃO</small><a data-v="fin" onclick="nav('fin')">💰 Financeiro</a><a data-v="forn" onclick="nav('forn')">🏭 Fornecedores</a><a data-v="cfg" onclick="nav('cfg')">⚙ Preços</a><a data-v="dados" onclick="nav('dados')">🛡 Dados e backups</a>
 <div class="me"><div class="av">A</div><div><b>Admin</b><div class="mut" style="color:#7d8c86">Fornecedor</div></div><button class="btn s" style="margin-left:auto" onclick="out()" title="Sair">⎋</button></div></aside>
@@ -86,11 +86,11 @@ OVER=r[0];REVS=r[1];ORDERS=r[2];PLATES=r[3];TIERS=r[4]}
 function inP(x){var d=U(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias'],['month','Este mês'],['all','Tudo']].map(function(p){return '<button class="pill '+(per===p[0]?'on':'')+'" onclick="per=\''+p[0]+'\';draw()">'+p[1]+'</button>'}).join('')+'</div>'}
 function head(t,s){$('hd').innerHTML='<h2>'+t+'</h2><span class="mut">'+s+'</span>'}
-function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='gl')loadGl();if(v==='bs')loadBs();if(v==='qr')loadQr();if(v==='me')loadMe();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
+function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='gl')loadGl();if(v==='bs')loadBs();if(v==='qr')loadQr();if(v==='me')loadMe();if(v==='orc'){OV=null;loadOrc()}if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
 function mo(h){$('mb').innerHTML=h;$('mo').style.display='grid'}function cl(){$('mo').style.display='none'}
 $('mo').onclick=function(e){if(e.target===this)cl()};
 function draw(){var aviso=(OVER&&OVER.persistente===false)?'<div class="card" style="border-color:#dc2626;margin-bottom:12px"><b style="color:#dc2626">⚠ Atenção: os dados não estão sendo guardados de forma permanente.</b><br><span class="mut">No Railway, crie um Volume (montado em /data) e conecte ao serviço. Até lá, cadastros e pedidos são apagados a cada atualização do sistema.</span></div>':'';
-$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,gl:vGl,bs:vBs,qr:vQr,me:vMe,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
+$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,gl:vGl,bs:vBs,qr:vQr,me:vMe,orc:vOrc,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
 async function baixarBackup(){
   try{
     var r=await fetch(API_BASE+'/admin/backup',{headers:{Authorization:'Bearer '+TOKEN}});
@@ -234,6 +234,83 @@ async function meLiberar(id){if(!confirm('Liberar o envio? O pedido vira "Enviad
 async function meRastrear(id){try{var r=await api('/admin/orders/'+id+'/melhor-envio/rastrear',{method:'POST'});await recarregar();if(r.codigo)avisoEnvio(r.order);else{cl();toast('Ainda sem código de rastreio. Tente de novo em alguns minutos.')}}catch(e){alert(e.message)}}
 async function meEtiqueta(id){try{var r=await api('/admin/orders/'+id+'/melhor-envio/etiqueta',{method:'POST'});if(r.url)window.open(r.url,'_blank');else alert('O Melhor Envio não devolveu o link da etiqueta.')}catch(e){alert(e.message)}}
 async function meConcluir(id){try{var r=await api('/admin/orders/'+id+'/melhor-envio/concluir',{method:'POST'});await recarregar();if(r.etiqueta_url)window.open(r.etiqueta_url,'_blank');cl();toast('Compra concluída ✓')}catch(e){alert(e.message)}}
+
+/* ===== Orçamentos ===== */
+var ORC=null,OV=null,OI=[],OFQ=null,OEDIT=null;
+async function loadOrc(){try{ORC=await api('/admin/orcamentos')}catch(e){ORC={erro:e.message}}if(cur==='orc')draw()}
+function oPreco(q){var t=TIERS.filter(function(x){return q>=x.min_qty&&q<=x.max_qty})[0];if(!t&&TIERS.length)t=q>TIERS[TIERS.length-1].max_qty?TIERS[TIERS.length-1]:TIERS[0];return t?t.unit_price:0}
+function oStTxt(s){return {aberto:'Em aberto',aprovado:'Aprovado',recusado:'Recusado'}[s]||s}
+function vOrc(){
+  if(OV)return vOrcVer();
+  head('Orçamentos','Monte orçamentos de placas, envie o link ou o PDF pelo WhatsApp e acompanhe se foi aprovado.');
+  if(!ORC)return '<div class="card mut">Carregando…</div>';if(ORC.erro)return '<div class="card">'+E(ORC.erro)+'</div>';
+  var hoje=new Date().toISOString().slice(0,10);
+  return '<div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:200px"><b>'+ORC.length+' orçamento(s)</b><div class="mut">Clique em um orçamento para abrir, enviar ou imprimir.</div></div><button class="btn p" onclick="orcForm()">＋ Novo orçamento</button></div>'
+  +'<div class="card"><div class="tw"><table><tr><th>Nº</th><th>Cliente</th><th>Total</th><th>Validade</th><th>Situação</th><th></th></tr>'
+  +(ORC.length?ORC.map(function(o){var v=o.validade&&o.validade<hoje&&o.status==='aberto';return '<tr style="cursor:pointer" onclick="orcAbrir('+o.id+')"><td><b>N '+E(o.numero)+'</b></td><td>'+E(o.cliente_nome)+'</td><td><b>'+R(o.total)+'</b></td><td>'+(o.validade?o.validade.split('-').reverse().join('/')+(v?' <span style="color:#dc2626;font-weight:700">vencido</span>':''):'—')+'</td><td><span class="st '+(o.status==='aprovado'?'entregue':o.status==='recusado'?'cancelado':'pendente')+'">'+oStTxt(o.status)+'</span></td><td><button class="btn" onclick="event.stopPropagation();orcAbrir('+o.id+')">Abrir</button></td></tr>'}).join(''):'<tr><td colspan="6" class="mut">Nenhum orçamento ainda. Clique em “Novo orçamento”.</td></tr>')
+  +'</table></div></div>'}
+async function orcAbrir(id){try{OV=await api('/admin/orcamentos/'+id);draw()}catch(e){alert(e.message)}}
+function vOrcVer(){var o=OV;head('Orçamento N '+E(o.numero),E(o.cliente_nome));
+  var b=function(t,f,c){return '<button class="btn'+(c?' '+c:'')+'" onclick="'+f+'">'+t+'</button>'};
+  return '<div class="card"><div class="row" style="flex-wrap:wrap;gap:8px">'+b('Enviar por WhatsApp','orcWpp()','p')+b('Compartilhar PDF','orcShare()','p')+b('Abrir / baixar PDF','window.open(OV.pdf,\'_blank\')')+b('Imprimir','orcPrint()')+b('Editar','orcForm(OV)')+b('Voltar','OV=null;loadOrc()')+b('Excluir','orcDel()')+'</div>'
+  +'<div class="row" style="margin-top:10px;align-items:center;gap:8px"><span class="mut">Situação:</span><select id="orst" onchange="orcSt()" style="width:auto"><option value="aberto"'+(o.status==='aberto'?' selected':'')+'>Em aberto</option><option value="aprovado"'+(o.status==='aprovado'?' selected':'')+'>Aprovado</option><option value="recusado"'+(o.status==='recusado'?' selected':'')+'>Recusado</option></select><span class="mut" style="font-size:12px">O WhatsApp abre com a mensagem pronta e o link do orçamento. Em celulares, “Compartilhar PDF” envia o arquivo direto.</span></div></div>'
+  +'<div class="card" style="padding:0;overflow:hidden"><iframe id="orif" src="'+E(o.url)+'" style="width:100%;height:880px;border:0;background:#fff"></iframe></div>'}
+function orcPrint(){var f=$('orif');try{f.contentWindow.focus();f.contentWindow.print()}catch(e){window.open(OV.url,'_blank')}}
+function orcWpp(){var o=OV,d=String(o.cliente_tel||'').replace(/\D/g,'');if(d&&d.length<=11)d='55'+d;
+  var nome=String(o.cliente_nome||'').split(' ')[0];
+  var m='Olá, '+nome+'! Segue o orçamento N '+o.numero+' da NexTap, no valor de '+R(o.total)+(o.validade?' (válido até '+o.validade.split('-').reverse().join('/')+')':'')+'.\n\nVeja ou baixe o PDF aqui: '+o.url;
+  window.open('https://wa.me/'+d+'?text='+encodeURIComponent(m),'_blank')}
+async function orcShare(){var o=OV;try{var r=await fetch(o.pdf);if(!r.ok)throw new Error('pdf');var bl=await r.blob(),f=new File([bl],'orcamento-'+o.numero+'.pdf',{type:'application/pdf'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Orçamento N '+o.numero,text:'Orçamento NexTap N '+o.numero})}
+  else{window.open(o.pdf,'_blank');toast('Neste aparelho o envio direto não está disponível: o PDF foi aberto para você salvar e enviar.')}}catch(e){if(e&&e.name==='AbortError')return;window.open(o.pdf,'_blank')}}
+async function orcSt(){try{await api('/admin/orcamentos/'+OV.id+'/status',{method:'POST',body:JSON.stringify({status:$('orst').value})});OV.status=$('orst').value;toast('Situação atualizada ✓')}catch(e){alert(e.message)}}
+async function orcDel(){if(!confirm('Excluir o orçamento N '+OV.numero+'? O link enviado ao cliente deixa de funcionar.'))return;try{await api('/admin/orcamentos/'+OV.id,{method:'DELETE'});OV=null;loadOrc()}catch(e){alert(e.message)}}
+/* formulário */
+var OMOD=['Placa NFC + QR Code (azul)','Placa NFC + QR Code (preta)','Placa Instagram degradê','Placa Pix','Placa WhatsApp'];
+function oPlacas(){return OI.reduce(function(a,i){return a+(/^Placa/i.test(i.desc)?(+i.qtd||0):0)},0)}
+function orcForm(o){OEDIT=o||null;OFQ=null;var d=o||{};
+  OI=o?o.itens.map(function(i){return {desc:i.desc,qtd:i.qtd,unit:i.unit,man:true}}):OMOD.map(function(d){return {desc:d,qtd:0,unit:0}});
+  var val=d.validade||new Date(Date.now()+7*864e5).toISOString().slice(0,10);
+  var f=function(id,l,v,x){return '<label>'+l+'<input id="'+id+'" value="'+E(v||'')+'" '+(x||'')+'></label>'};
+  mo('<h3 style="margin:0">'+(o?'Editar orçamento N '+E(o.numero):'Novo orçamento')+'</h3>'
+  +'<b>Cliente</b>'+f('oc1','Nome',d.cliente_nome)
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+f('oc2','Telefone / WhatsApp',d.cliente_tel,'inputmode="tel"')+f('oc3','CPF ou CNPJ',d.cliente_doc,'inputmode="numeric"')+'</div>'
+  +f('oc4','E-mail (opcional)',d.cliente_email)
+  +'<div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px">'+f('oc5','CEP',d.cliente_cep,'inputmode="numeric" maxlength="9" oninput="orcCep()"')+f('oc6','Cidade',d.cliente_cidade)+f('oc7','UF',d.cliente_uf,'maxlength="2" style="text-transform:uppercase"')+'</div>'
+  +'<b style="margin-top:6px">Itens</b><div id="oitens"></div>'
+  +'<small class="mut">Informe a quantidade de cada modelo. O preço unitário segue a tabela de faixas pela quantidade total de placas e muda sozinho quando você altera as quantidades.</small>'
+  +'<div class="row" style="flex-wrap:wrap;gap:6px">'+OMOD.map(function(m,k){return '<button class="btn" onclick="orcAdd(OMOD['+k+'])">＋ '+m.replace('Placa NFC + QR Code ','').replace('Placa ','')+'</button>'}).join('')+'<button class="btn" onclick="orcAdd(\'\')">＋ Item livre</button><button class="btn" onclick="orcPrecos(1)">↻ Preço pela tabela</button></div>'
+  +'<b style="margin-top:6px">Frete</b><div class="row" style="align-items:flex-end;gap:8px"><button class="btn" onclick="orcFrete()">Calcular pelo CEP (Melhor Envio)</button></div><div id="ofop" class="mut"></div>'
+  +'<div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px">'+f('of1','Frete (R$)',d.frete?String(d.frete).replace('.',','):'','inputmode="decimal" oninput="orcTot()"')+f('of2','Descrição do frete',d.frete_desc,'placeholder="Ex.: Correios PAC"')+f('of3','Desconto (R$)',d.desconto?String(d.desconto).replace('.',','):'','inputmode="decimal" oninput="orcTot()"')+'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Validade<input id="ov1" type="date" value="'+E(val)+'"></label>'+f('ov2','Vendedor',d.vendedor||'')+'</div>'
+  +'<label>Observações<textarea id="ov3" rows="3" placeholder="Prazo de produção, forma de pagamento...">'+E(d.obs||'')+'</textarea></label>'
+  +'<div id="otot" style="background:var(--soft,#f1f5f9);border-radius:10px;padding:10px 12px;font-size:15px"></div>'
+  +'<div class="row"><button class="btn p" onclick="orcSalvar()">'+(o?'Salvar alterações':'Criar orçamento')+'</button><button class="btn" onclick="cl()">Cancelar</button></div>');
+  $('mb').style.maxWidth='640px';orcRows();if(!o)orcPrecos();setTimeout(function(){$('oc1').focus()},50)}
+function orcPrecos(forcar){var q=oPlacas();OI.forEach(function(i,k){if(/^Placa/i.test(i.desc)&&(forcar||!i.man)){if(forcar)i.man=false;i.unit=oPreco(q);var e=$('ouv'+k);if(e)e.value=String(i.unit).replace('.',',')}});orcTot()}
+function orcAdd(t){if(t){var ja=OI.filter(function(i){return i.desc===t})[0];if(ja){ja.qtd=(+ja.qtd||0)+10;orcRows();orcPrecos();return}}
+  OI.push({desc:t,qtd:t?10:1,unit:0});orcRows();if(t)orcPrecos()}
+function orcQtd(k,v){OI[k].qtd=parseInt(v)||0;orcPrecos()}
+function orcRows(){var c=$('oitens');if(!c)return;
+  c.innerHTML='<div class="tw"><table><tr><th>Descrição</th><th style="width:70px">Qtd.</th><th style="width:100px">Unitário</th><th style="width:90px">Subtotal</th><th></th></tr>'+OI.map(function(i,k){return '<tr><td><input value="'+E(i.desc)+'" oninput="OI['+k+'].desc=this.value;orcTot()" placeholder="Descrição"></td><td><input value="'+(i.qtd?E(i.qtd):'')+'" placeholder="0" inputmode="numeric" oninput="orcQtd('+k+',this.value)"></td><td><input id="ouv'+k+'" value="'+E(String(i.unit).replace('.',','))+'" inputmode="decimal" oninput="OI['+k+'].unit=parseFloat(this.value.replace(\',\',\'.\'))||0;OI['+k+'].man=true;orcTot()"></td><td id="osub'+k+'"><b>'+R((+i.qtd||0)*(+i.unit||0))+'</b></td><td><a style="cursor:pointer;color:#dc2626" onclick="OI.splice('+k+',1);orcRows();orcPrecos()">✕</a></td></tr>'}).join('')+'</table></div>';orcTot()}
+function oN(id){var e=$(id);return e?(parseFloat(String(e.value).replace(',','.'))||0):0}
+function orcTot(){var sub=0;OI.forEach(function(i,k){var s=(+i.qtd||0)*(+i.unit||0);sub+=s;var e=$('osub'+k);if(e)e.innerHTML='<b>'+R(s)+'</b>'});
+  var t=sub+oN('of1')-oN('of3'),e=$('otot');if(e)e.innerHTML='Subtotal '+R(sub)+(oN('of1')?' · frete '+R(oN('of1')):'')+(oN('of3')?' · desconto − '+R(oN('of3')):'')+' → <b style="font-size:18px">Total '+R(t)+'</b>'}
+var oCepLast='';
+function orcCep(){var d=$('oc5').value.replace(/\D/g,'');if(d.length!==8||d===oCepLast)return;oCepLast=d;
+  fetch('https://viacep.com.br/ws/'+d+'/json/').then(function(r){return r.json()}).then(function(j){if(j&&!j.erro){if($('oc6')&&!$('oc6').value)$('oc6').value=j.localidade||'';if($('oc7')&&!$('oc7').value)$('oc7').value=j.uf||''}}).catch(function(){})}
+async function orcFrete(){var cep=$('oc5').value.replace(/\D/g,''),q=oPlacas()||OI.reduce(function(a,i){return a+(+i.qtd||0)},0),b=$('ofop');
+  if(cep.length!==8)return alert('Informe o CEP do cliente (8 números).');if(!q)return alert('Adicione as placas antes de calcular o frete.');
+  b.innerHTML='Calculando…';
+  try{var r=await api('/frete/cotar',{method:'POST',body:JSON.stringify({cep:cep,qtd:q})});OFQ=r.opcoes;
+    b.innerHTML=(r.aviso?'<div>'+E(r.aviso)+'</div>':'')+r.opcoes.map(function(o,i){return '<label style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid rgba(128,128,128,.25);margin:0"><input type="radio" name="ofs" style="width:auto" onchange="orcEscolhe('+i+')"><span style="flex:1">'+E([o.empresa,o.nome].filter(Boolean).join(' '))+(o.prazo?' <small>· '+o.prazo+' dia(s) úteis</small>':'')+'</span><b>'+R(o.preco)+'</b></label>'}).join('')}
+  catch(e){b.innerHTML='<span style="color:#dc2626">'+E(e.message)+'</span>'}}
+function orcEscolhe(i){var o=OFQ[i];$('of1').value=String(o.preco).replace('.',',');$('of2').value=[o.empresa,o.nome].filter(Boolean).join(' ');orcTot()}
+async function orcSalvar(){
+  var body={cliente_nome:$('oc1').value,cliente_tel:$('oc2').value,cliente_doc:$('oc3').value,cliente_email:$('oc4').value,cliente_cep:$('oc5').value,cliente_cidade:$('oc6').value,cliente_uf:$('oc7').value,
+    itens:OI.map(function(i){return {desc:i.desc,qtd:+i.qtd||0,unit:+i.unit||0}}),frete:oN('of1'),frete_desc:$('of2').value,desconto:oN('of3'),validade:$('ov1').value,vendedor:$('ov2').value,obs:$('ov3').value};
+  try{var r=OEDIT?await api('/admin/orcamentos/'+OEDIT.id,{method:'PUT',body:JSON.stringify(body)}):await api('/admin/orcamentos',{method:'POST',body:JSON.stringify(body)});
+    cl();OV=r;draw();loadOrc();toast('Orçamento salvo ✓')}catch(e){alert(e.message)}}
 function toast(m){var t=$('tt');if(!t){t=document.createElement('div');t.id='tt';t.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#15803d;color:#fff;padding:12px 20px;border-radius:12px;font-weight:600;z-index:40;box-shadow:0 10px 30px #0004;transition:opacity .3s';document.body.appendChild(t)}t.textContent=m;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(function(){t.style.opacity=0},2600)}
 /* ===== FORNECEDORES / ESTOQUE ===== */
 var FORN=null;
