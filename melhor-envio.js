@@ -37,7 +37,8 @@ async function api(metodo, caminho, corpo) {
     let m = j.message || j.error || '';
     if (j.errors && typeof j.errors === 'object') m += ' ' + Object.values(j.errors).flat().join(' ');
     if (r.status === 401) m = 'o Melhor Envio recusou o token. Confira se a variável MELHOR_ENVIO_TOKEN no Railway tem o token completo e sem aspas, se não há MELHOR_ENVIO_SANDBOX=1 com token de produção (ou o contrário) e se o token tem as permissões de envio.';
-    throw Object.assign(new Error('Melhor Envio: ' + (String(m).trim() || ('erro ' + r.status))), { status: r.status === 401 ? 401 : 422, detalhe: j });
+    if (r.status === 403 || /unauthorized/i.test(String(m))) m = 'o token não tem permissão para esta ação. Gere um token novo no Melhor Envio marcando TODAS as permissões (cotação, carrinho, compra, geração, impressão e rastreio de etiquetas, pedidos e perfil).';
+    throw Object.assign(new Error('Melhor Envio: ' + (String(m).trim() || ('erro ' + r.status))), { status: r.status === 401 ? 401 : r.status === 403 ? 403 : 422, detalhe: j });
   }
   return j;
 }
@@ -252,7 +253,14 @@ router.post('/api/admin/melhor-envio/testar', requireAdmin, async (req, res) => 
     const u = await api('GET', '');
     let saldo = null; try { const s = await api('GET', '/balance'); saldo = s.balance ?? null; } catch { /* opcional */ }
     res.json({ ok: true, ...info, nome: [u.firstname, u.lastname].filter(Boolean).join(' ') || u.name || null, email: u.email || null, saldo });
-  } catch (e) { res.json({ ok: false, ...info, erro: e.message, status: e.status }); }
+  } catch (e) {
+    // Sem permissão de perfil? Tenta o que importa: uma cotação de frete.
+    try {
+      const rem = remetente().postal_code;
+      if (rem.length === 8 && e.status !== 401) { const r = await cotarRaw('01001000', 1, 20); if (r.opcoes.length) return res.json({ ok: true, ...info, nome: null, email: null, saldo: null, aviso: 'A cotação de frete funciona. O token não tem permissão para ler o perfil/saldo (' + e.message.replace(/^Melhor Envio: /, '') + ') — para COMPRAR etiquetas gere um token com todas as permissões.' }); }
+    } catch (e2) { e = e2.status === 403 || !e.status ? e2 : e; }
+    res.json({ ok: false, ...info, erro: e.message, status: e.status });
+  }
 });
 router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
   const b = req.body || {}, ant = embalagem();
