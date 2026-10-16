@@ -395,6 +395,14 @@ CREATE TABLE IF NOT EXISTS sales (
     INSERT OR IGNORE INTO settings (chave, valor) VALUES ('qr_lote_auto', '50');
     INSERT OR IGNORE INTO settings (chave, valor) VALUES ('qr_auto', '1');
   `),
+  // v16 — integração Melhor Envio: id da etiqueta, serviço comprado, link da etiqueta e valor pago. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN me_id TEXT;
+    ALTER TABLE orders ADD COLUMN me_servico_id INTEGER;
+    ALTER TABLE orders ADD COLUMN me_etiqueta_url TEXT;
+    ALTER TABLE orders ADD COLUMN me_status TEXT;
+    CREATE INDEX IF NOT EXISTS idx_orders_me ON orders(me_id);
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
