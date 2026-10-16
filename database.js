@@ -410,6 +410,16 @@ CREATE TABLE IF NOT EXISTS sales (
     ALTER TABLE orders ADD COLUMN me_erro TEXT;
     ALTER TABLE orders ADD COLUMN me_tent INTEGER NOT NULL DEFAULT 0;
   `),
+  // v18 — orçamentos de placas (admin): cliente, itens, frete, desconto, validade e link público. Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS orcamentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL UNIQUE,
+      cliente_nome TEXT NOT NULL, cliente_doc TEXT, cliente_tel TEXT, cliente_email TEXT, cliente_cep TEXT, cliente_cidade TEXT, cliente_uf TEXT,
+      itens TEXT NOT NULL DEFAULT '[]', frete REAL NOT NULL DEFAULT 0, frete_desc TEXT, desconto REAL NOT NULL DEFAULT 0,
+      validade TEXT, obs TEXT, vendedor TEXT, status TEXT NOT NULL DEFAULT 'aberto',
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

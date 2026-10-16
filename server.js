@@ -64,6 +64,7 @@ app.use('/', require('./catalogo.js')); // catálogo de produtos (LP + checkout 
 app.use('/', require('./declaracao-conteudo.js')); // declaração de conteúdo em PDF (página /admin/declaracao + API)
 app.use('/', require('./exportar-placas.js'));
 app.use('/', require('./estoque-qr.js')); // estoque de QR pré-numerados: /api/admin/qr-estoque // exportação das últimas placas vendidas (ZIP para o fornecedor)
+app.use('/', require('./orcamentos.js')); // orçamentos: admin + link público /o/:token
 app.use('/', require('./melhor-envio.js')); // Melhor Envio: cotação, etiqueta e rastreio (admin)
 app.use('/', require('./biosite.js')); // biosites: /b/:slug público, /api/biosites (revendedor) e /api/admin/biosites
 app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / NFC da placa e /api/public/stats
