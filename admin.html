@@ -266,10 +266,10 @@ async function orcShare(){var o=OV;try{var r=await fetch(o.pdf);if(!r.ok)throw n
 async function orcSt(){try{await api('/admin/orcamentos/'+OV.id+'/status',{method:'POST',body:JSON.stringify({status:$('orst').value})});OV.status=$('orst').value;toast('Situação atualizada ✓')}catch(e){alert(e.message)}}
 async function orcDel(){if(!confirm('Excluir o orçamento N '+OV.numero+'? O link enviado ao cliente deixa de funcionar.'))return;try{await api('/admin/orcamentos/'+OV.id,{method:'DELETE'});OV=null;loadOrc()}catch(e){alert(e.message)}}
 /* formulário */
+var OMOD=['Placa NFC + QR Code (azul)','Placa NFC + QR Code (preta)','Placa Instagram degradê','Placa Pix','Placa WhatsApp'];
 function oPlacas(){return OI.reduce(function(a,i){return a+(/^Placa/i.test(i.desc)?(+i.qtd||0):0)},0)}
 function orcForm(o){OEDIT=o||null;OFQ=null;var d=o||{};
-  OI=o?o.itens.map(function(i){return {desc:i.desc,qtd:i.qtd,unit:i.unit}}):[{desc:'Placa NFC + QR Code (azul)',qtd:10,unit:0},{desc:'Placa NFC + QR Code (preta)',qtd:10,unit:0}];
-  if(!o)orcPrecos();
+  OI=o?o.itens.map(function(i){return {desc:i.desc,qtd:i.qtd,unit:i.unit,man:true}}):OMOD.map(function(d){return {desc:d,qtd:0,unit:0}});
   var val=d.validade||new Date(Date.now()+7*864e5).toISOString().slice(0,10);
   var f=function(id,l,v,x){return '<label>'+l+'<input id="'+id+'" value="'+E(v||'')+'" '+(x||'')+'></label>'};
   mo('<h3 style="margin:0">'+(o?'Editar orçamento N '+E(o.numero):'Novo orçamento')+'</h3>'
@@ -278,18 +278,21 @@ function orcForm(o){OEDIT=o||null;OFQ=null;var d=o||{};
   +f('oc4','E-mail (opcional)',d.cliente_email)
   +'<div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px">'+f('oc5','CEP',d.cliente_cep,'inputmode="numeric" maxlength="9" oninput="orcCep()"')+f('oc6','Cidade',d.cliente_cidade)+f('oc7','UF',d.cliente_uf,'maxlength="2" style="text-transform:uppercase"')+'</div>'
   +'<b style="margin-top:6px">Itens</b><div id="oitens"></div>'
-  +'<div class="row" style="flex-wrap:wrap;gap:6px"><button class="btn" onclick="orcAdd(\'Placa NFC + QR Code (azul)\')">＋ Placa azul</button><button class="btn" onclick="orcAdd(\'Placa NFC + QR Code (preta)\')">＋ Placa preta</button><button class="btn" onclick="orcAdd(\'\')">＋ Item livre</button><button class="btn" onclick="orcPrecos(1)">↻ Preço pela tabela</button></div>'
+  +'<small class="mut">Informe a quantidade de cada modelo. O preço unitário segue a tabela de faixas pela quantidade total de placas e muda sozinho quando você altera as quantidades.</small>'
+  +'<div class="row" style="flex-wrap:wrap;gap:6px">'+OMOD.map(function(m,k){return '<button class="btn" onclick="orcAdd(OMOD['+k+'])">＋ '+m.replace('Placa NFC + QR Code ','').replace('Placa ','')+'</button>'}).join('')+'<button class="btn" onclick="orcAdd(\'\')">＋ Item livre</button><button class="btn" onclick="orcPrecos(1)">↻ Preço pela tabela</button></div>'
   +'<b style="margin-top:6px">Frete</b><div class="row" style="align-items:flex-end;gap:8px"><button class="btn" onclick="orcFrete()">Calcular pelo CEP (Melhor Envio)</button></div><div id="ofop" class="mut"></div>'
   +'<div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px">'+f('of1','Frete (R$)',d.frete?String(d.frete).replace('.',','):'','inputmode="decimal" oninput="orcTot()"')+f('of2','Descrição do frete',d.frete_desc,'placeholder="Ex.: Correios PAC"')+f('of3','Desconto (R$)',d.desconto?String(d.desconto).replace('.',','):'','inputmode="decimal" oninput="orcTot()"')+'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Validade<input id="ov1" type="date" value="'+E(val)+'"></label>'+f('ov2','Vendedor',d.vendedor||'')+'</div>'
   +'<label>Observações<textarea id="ov3" rows="3" placeholder="Prazo de produção, forma de pagamento...">'+E(d.obs||'')+'</textarea></label>'
   +'<div id="otot" style="background:var(--soft,#f1f5f9);border-radius:10px;padding:10px 12px;font-size:15px"></div>'
   +'<div class="row"><button class="btn p" onclick="orcSalvar()">'+(o?'Salvar alterações':'Criar orçamento')+'</button><button class="btn" onclick="cl()">Cancelar</button></div>');
-  $('mb').style.maxWidth='640px';orcRows();setTimeout(function(){$('oc1').focus()},50)}
-function orcPrecos(manual){var q=oPlacas();OI.forEach(function(i){if(/^Placa/i.test(i.desc)||!manual&&!i.unit)i.unit=oPreco(q)});if(manual)orcRows()}
-function orcAdd(t){OI.push({desc:t,qtd:t?10:1,unit:t?oPreco(oPlacas()+10):0});if(t)orcPrecos();orcRows()}
+  $('mb').style.maxWidth='640px';orcRows();if(!o)orcPrecos();setTimeout(function(){$('oc1').focus()},50)}
+function orcPrecos(forcar){var q=oPlacas();OI.forEach(function(i,k){if(/^Placa/i.test(i.desc)&&(forcar||!i.man)){if(forcar)i.man=false;i.unit=oPreco(q);var e=$('ouv'+k);if(e)e.value=String(i.unit).replace('.',',')}});orcTot()}
+function orcAdd(t){if(t){var ja=OI.filter(function(i){return i.desc===t})[0];if(ja){ja.qtd=(+ja.qtd||0)+10;orcRows();orcPrecos();return}}
+  OI.push({desc:t,qtd:t?10:1,unit:0});orcRows();if(t)orcPrecos()}
+function orcQtd(k,v){OI[k].qtd=parseInt(v)||0;orcPrecos()}
 function orcRows(){var c=$('oitens');if(!c)return;
-  c.innerHTML='<div class="tw"><table><tr><th>Descrição</th><th style="width:70px">Qtd.</th><th style="width:100px">Unitário</th><th style="width:90px">Subtotal</th><th></th></tr>'+OI.map(function(i,k){return '<tr><td><input value="'+E(i.desc)+'" oninput="OI['+k+'].desc=this.value;orcTot()" placeholder="Descrição"></td><td><input value="'+E(i.qtd)+'" inputmode="numeric" oninput="OI['+k+'].qtd=parseInt(this.value)||0;orcTot()"></td><td><input value="'+E(String(i.unit).replace('.',','))+'" inputmode="decimal" oninput="OI['+k+'].unit=parseFloat(this.value.replace(\',\',\'.\'))||0;orcTot()"></td><td id="osub'+k+'"><b>'+R((+i.qtd||0)*(+i.unit||0))+'</b></td><td><a style="cursor:pointer;color:#dc2626" onclick="OI.splice('+k+',1);orcRows()">✕</a></td></tr>'}).join('')+'</table></div>';orcTot()}
+  c.innerHTML='<div class="tw"><table><tr><th>Descrição</th><th style="width:70px">Qtd.</th><th style="width:100px">Unitário</th><th style="width:90px">Subtotal</th><th></th></tr>'+OI.map(function(i,k){return '<tr><td><input value="'+E(i.desc)+'" oninput="OI['+k+'].desc=this.value;orcTot()" placeholder="Descrição"></td><td><input value="'+(i.qtd?E(i.qtd):'')+'" placeholder="0" inputmode="numeric" oninput="orcQtd('+k+',this.value)"></td><td><input id="ouv'+k+'" value="'+E(String(i.unit).replace('.',','))+'" inputmode="decimal" oninput="OI['+k+'].unit=parseFloat(this.value.replace(\',\',\'.\'))||0;OI['+k+'].man=true;orcTot()"></td><td id="osub'+k+'"><b>'+R((+i.qtd||0)*(+i.unit||0))+'</b></td><td><a style="cursor:pointer;color:#dc2626" onclick="OI.splice('+k+',1);orcRows();orcPrecos()">✕</a></td></tr>'}).join('')+'</table></div>';orcTot()}
 function oN(id){var e=$(id);return e?(parseFloat(String(e.value).replace(',','.'))||0):0}
 function orcTot(){var sub=0;OI.forEach(function(i,k){var s=(+i.qtd||0)*(+i.unit||0);sub+=s;var e=$('osub'+k);if(e)e.innerHTML='<b>'+R(s)+'</b>'});
   var t=sub+oN('of1')-oN('of3'),e=$('otot');if(e)e.innerHTML='Subtotal '+R(sub)+(oN('of1')?' · frete '+R(oN('of1')):'')+(oN('of3')?' · desconto − '+R(oN('of3')):'')+' → <b style="font-size:18px">Total '+R(t)+'</b>'}
