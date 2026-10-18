@@ -20,7 +20,9 @@ const embalagem = () => Object.fromEntries(Object.entries(EMBALAGEM).map(([k, d]
 const base = () => (process.env.MELHOR_ENVIO_BASE || (process.env.MELHOR_ENVIO_SANDBOX === '1' ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br')).replace(/\/$/, '');
 // Limpa o que costuma vir junto ao colar: espaços, quebras de linha, aspas e o prefixo "Bearer ".
 const token = () => String(process.env.MELHOR_ENVIO_TOKEN || '').replace(/\s+/g, '').replace(/^["']+|["']+$/g, '').replace(/^Bearer/i, '');
-const contato = () => process.env.MELHOR_ENVIO_EMAIL || set('me_email', '') || process.env.MAIL_FROM || 'contato@nextapbrasil.com.br';
+// E-mail do remetente: o Melhor Envio recusa qualquer coisa que não seja um e-mail puro (ex.: "NexTap <contato@site.com>" é rejeitado).
+const extraiEmail = t => { const m = String(t || '').match(/[^\s@<>"',;()]+@[^\s@<>"',;()]+\.[^\s@<>"',;()]+/); return m ? m[0].toLowerCase() : ''; };
+const contato = () => [process.env.MELHOR_ENVIO_EMAIL, set('me_email', ''), process.env.MAIL_FROM].map(extraiEmail).find(e => e && !/^no-?reply@/.test(e)) || 'contato@nextapbrasil.com.br';
 
 async function api(metodo, caminho, corpo) {
   if (!token()) throw Object.assign(new Error('Melhor Envio não configurado: defina a variável MELHOR_ENVIO_TOKEN no Railway.'), { status: 503 });
@@ -35,7 +37,7 @@ async function api(metodo, caminho, corpo) {
   const txt = await r.text(); let j; try { j = txt ? JSON.parse(txt) : {}; } catch { j = { raw: txt.slice(0, 300) }; }
   if (!r.ok) {
     let m = j.message || j.error || '';
-    if (j.errors && typeof j.errors === 'object') m += ' ' + Object.values(j.errors).flat().join(' ');
+    if (j.errors && typeof j.errors === 'object') m += ' ' + [...new Set(Object.values(j.errors).flat())].join(' ');
     if (r.status === 401) m = 'o Melhor Envio recusou o token. Confira se a variável MELHOR_ENVIO_TOKEN no Railway tem o token completo e sem aspas, se não há MELHOR_ENVIO_SANDBOX=1 com token de produção (ou o contrário) e se o token tem as permissões de envio.';
     if (r.status === 403 || /unauthorized/i.test(String(m))) m = 'o token não tem permissão para esta ação. Gere um token novo no Melhor Envio marcando TODAS as permissões (cotação, carrinho, compra, geração, impressão e rastreio de etiquetas, pedidos e perfil).';
     throw Object.assign(new Error('Melhor Envio: ' + (String(m).trim() || ('erro ' + r.status))), { status: r.status === 401 ? 401 : r.status === 403 ? 403 : 422, detalhe: j });
@@ -270,7 +272,8 @@ router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
     if (['me_margem', 'me_pct'].includes(k)) { const n = num(v || '0'); if (!(n >= 0 && n <= 1000)) return res.status(400).json({ error: 'Acréscimo inválido.' }); v = String(n); }
     if (k === 'me_caixa') { const n = parseInt(v, 10); if (!(n >= 1)) return res.status(400).json({ error: 'Placas por caixa inválido.' }); v = String(n); }
     if (k === 'me_ao_vivo' || k === 'me_auto') v = v === '1' || v === 'true' ? '1' : '0';
-    if (k === 'me_tel') { v = dig(v).replace(/^55(?=\d{10,11}$)/, ''); if (v && v.length < 10) return res.status(400).json({ error: 'Telefone inválido: informe o DDD e o número (ex.: 75999999999).' }); } if (k === 'me_seguro') v = v === '1' || v === 'true' ? '1' : '0';
+    if (k === 'me_tel') { v = dig(v).replace(/^55(?=\d{10,11}$)/, ''); if (v && v.length < 10) return res.status(400).json({ error: 'Telefone inválido: informe o DDD e o número (ex.: 75999999999).' }); } if (k === 'me_email') { if (v && !extraiEmail(v)) return res.status(400).json({ error: 'E-mail inválido: use o formato nome@dominio.com.' }); v = extraiEmail(v); }
+    if (k === 'me_seguro') v = v === '1' || v === 'true' ? '1' : '0';
     putSet.run(k, v);
   }
   res.json({ ok: true, config: embalagem() });
