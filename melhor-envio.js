@@ -47,7 +47,7 @@ async function api(metodo, caminho, corpo) {
 function remetente() {
   const c = embalagem();
   const doc = dig(set('rem_doc', ''));
-  const r = { name: set('rem_nome', ''), phone: dig(c.me_tel), email: contato(), address: set('rem_rua', ''), complement: set('rem_complemento', ''),
+  const r = { name: set('rem_nome', ''), phone: dig(c.me_tel).replace(/^55(?=\d{10,11}$)/, ''), email: contato(), address: set('rem_rua', ''), complement: set('rem_complemento', ''),
     number: set('rem_numero', ''), district: set('rem_bairro', ''), city: set('rem_cidade', ''), state_abbr: set('rem_uf', '').toUpperCase(), country_id: 'BR', postal_code: dig(set('rem_cep', '')) };
   if (doc.length === 14) { r.company_document = doc; if (c.me_ie) r.state_register = c.me_ie; } else r.document = doc;
   return r;
@@ -56,7 +56,7 @@ function faltaRemetente(r) {
   const f = [];
   if (!r.name) f.push('nome'); if (!(r.document || r.company_document)) f.push('CPF/CNPJ'); if (r.postal_code.length !== 8) f.push('CEP');
   if (!r.address) f.push('rua'); if (!r.number) f.push('número'); if (!r.district) f.push('bairro'); if (!r.city) f.push('cidade'); if (!r.state_abbr) f.push('UF');
-  if (!r.phone) f.push('telefone');
+  if (r.phone.length < 10) f.push('telefone');
   return f;
 }
 function pedido(id) {
@@ -104,7 +104,7 @@ async function cotar(id) {
   const o = pedido(id); if (!o) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
   if (o.dest.postal_code.length !== 8) throw Object.assign(new Error('O pedido não tem CEP de entrega válido.'), { status: 400 });
   const r = await cotarRaw(o.dest.postal_code, o.qtd, o.unit_price);
-  return { ...r, valor_cobrado: o.shipping_fee || 0, servico_pedido: o.me_servico_id || null, servico_pedido_nome: o.shipping_service || null };
+  return { ...r, remetente_falta: faltaRemetente(remetente()), valor_cobrado: o.shipping_fee || 0, servico_pedido: o.me_servico_id || null, servico_pedido_nome: o.shipping_service || null };
 }
 
 // ---------- frete no checkout (cliente / revendedor) ----------
@@ -270,7 +270,7 @@ router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
     if (['me_margem', 'me_pct'].includes(k)) { const n = num(v || '0'); if (!(n >= 0 && n <= 1000)) return res.status(400).json({ error: 'Acréscimo inválido.' }); v = String(n); }
     if (k === 'me_caixa') { const n = parseInt(v, 10); if (!(n >= 1)) return res.status(400).json({ error: 'Placas por caixa inválido.' }); v = String(n); }
     if (k === 'me_ao_vivo' || k === 'me_auto') v = v === '1' || v === 'true' ? '1' : '0';
-    if (k === 'me_tel') v = dig(v); if (k === 'me_seguro') v = v === '1' || v === 'true' ? '1' : '0';
+    if (k === 'me_tel') { v = dig(v).replace(/^55(?=\d{10,11}$)/, ''); if (v && v.length < 10) return res.status(400).json({ error: 'Telefone inválido: informe o DDD e o número (ex.: 75999999999).' }); } if (k === 'me_seguro') v = v === '1' || v === 'true' ? '1' : '0';
     putSet.run(k, v);
   }
   res.json({ ok: true, config: embalagem() });
@@ -336,4 +336,5 @@ async function tentarPendentes() {
 setTimeout(() => tentarPendentes().catch(() => {}), 60 * 1000).unref();
 setInterval(() => tentarPendentes().catch(() => {}), 5 * 60 * 1000).unref();
 router.autoComprar = autoComprar; router.tentarPendentes = tentarPendentes;
+router._t = { remetente, faltaRemetente };
 module.exports = router;
