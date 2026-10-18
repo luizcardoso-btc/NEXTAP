@@ -99,7 +99,9 @@ async function cotarRaw(cepDest, qtd, valorUnit) {
   const opcoes = (Array.isArray(j) ? j : []).map(s => ({
     id: s.id, nome: s.name, empresa: s.company && s.company.name, erro: s.error || null,
     preco: +(num(s.custom_price ?? s.price) * np).toFixed(2), prazo: s.custom_delivery_time ?? s.delivery_time, precisa_agencia: /latam|azul|buslog/i.test((s.company && s.company.name) || ''),
-  })).filter(s => !s.erro && Number.isFinite(s.preco) && s.preco > 0 && !s.precisa_agencia).sort((a, b) => a.preco - b.preco);
+  })).filter(s => !s.erro && Number.isFinite(s.preco) && s.preco > 0 && !s.precisa_agencia
+    && /correios/i.test(s.empresa || '') && /^(pac|sedex)$/i.test(String(s.nome || '').trim())) // só Correios: PAC e SEDEX
+    .sort((a, b) => a.preco - b.preco);
   return { pacote: pq, pacotes: np, opcoes };
 }
 async function cotar(id) {
@@ -339,5 +341,5 @@ async function tentarPendentes() {
 setTimeout(() => tentarPendentes().catch(() => {}), 60 * 1000).unref();
 setInterval(() => tentarPendentes().catch(() => {}), 5 * 60 * 1000).unref();
 router.autoComprar = autoComprar; router.tentarPendentes = tentarPendentes;
-router._t = { remetente, faltaRemetente };
+router._t = { remetente, faltaRemetente, cotarRaw };
 module.exports = router;
