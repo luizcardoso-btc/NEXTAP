@@ -435,6 +435,8 @@ CREATE TABLE IF NOT EXISTS sales (
     );
     CREATE INDEX IF NOT EXISTS idx_prospecto_hist ON prospecto_hist(prospecto_id, id);
   `),
+  // v20 — frete de reserva (quando o CEP não tem PAC/SEDEX ou o Melhor Envio falha) passa a ser R$ 31,00. Continua editável no admin.
+  db => db.exec(`INSERT INTO settings (chave, valor) VALUES ('frete_fixo', '31.00') ON CONFLICT(chave) DO UPDATE SET valor = '31.00';`),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

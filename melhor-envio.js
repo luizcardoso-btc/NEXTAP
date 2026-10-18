@@ -116,9 +116,9 @@ const cacheFrete = new Map();
 const aoVivo = () => !!token() && embalagem().me_ao_vivo === '1' && remetente().postal_code.length === 8;
 const comAcrescimo = p => { const c = embalagem(); return +(p * (1 + (num(c.me_pct) || 0) / 100) + (num(c.me_margem) || 0)).toFixed(2); };
 const MAX_OPCOES = 4;
-// Opções de frete para mostrar ao comprador. Se o Melhor Envio estiver fora do ar ou desligado, cai no frete fixo.
+// Opções de frete para mostrar ao comprador (só Correios PAC/SEDEX). Se o CEP não tiver nenhum dos dois, ou o Melhor Envio estiver fora do ar, vale o frete de reserva (R$ 31,00 por padrão, editável em Preços).
 async function opcoesFrete(cep, qtd) {
-  const fixo = { origem: 'fixo', opcoes: [{ id: 0, nome: 'Frete fixo', empresa: null, preco: db.freteFixo(), prazo: null }] };
+  const fixo = { origem: 'fixo', opcoes: [{ id: 0, nome: 'Frete Correios', empresa: null, preco: db.freteFixo(), prazo: null }] };
   cep = dig(cep); qtd = Math.floor(Number(qtd));
   if (cep.length !== 8 || !(qtd >= 1)) return fixo;
   if (!aoVivo()) return fixo;
@@ -126,11 +126,11 @@ async function opcoesFrete(cep, qtd) {
   if (hit && Date.now() - hit.t < 15 * 60 * 1000) return hit.d;
   try {
     const r = await cotarRaw(cep, qtd, precoUnit(qtd));
-    if (!r.opcoes.length) return { ...fixo, aviso: 'Sem frete disponível para este CEP; usando o frete fixo.' };
+    if (!r.opcoes.length) return { ...fixo, aviso: 'PAC e SEDEX não estão disponíveis para este CEP; o frete padrão é de R$ ' + db.freteFixo().toFixed(2).replace('.', ',') + '.' };
     const d = { origem: 'melhor_envio', pacotes: r.pacotes, opcoes: r.opcoes.slice(0, MAX_OPCOES).map(o => ({ id: o.id, nome: o.nome, empresa: o.empresa, prazo: o.prazo, preco: comAcrescimo(o.preco) })) };
     cacheFrete.set(chave, { t: Date.now(), d }); if (cacheFrete.size > 500) cacheFrete.delete(cacheFrete.keys().next().value);
     return d;
-  } catch (e) { console.warn('[Melhor Envio] cotação falhou, usando frete fixo:', e.message); return { ...fixo, aviso: 'Não consegui calcular o frete agora; usando o frete fixo.' }; }
+  } catch (e) { console.warn('[Melhor Envio] cotação falhou, usando frete fixo:', e.message); return { ...fixo, aviso: 'Não consegui calcular o frete agora; o frete padrão é de R$ ' + db.freteFixo().toFixed(2).replace('.', ',') + '.' }; }
 }
 // Escolhe o frete que será cobrado no pedido (o servidor recalcula; nunca confia no valor vindo da tela).
 async function resolverFrete(cep, qtd, servicoId) {
