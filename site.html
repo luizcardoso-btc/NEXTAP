@@ -33,6 +33,13 @@ section{padding:52px 0}section.s{background:var(--soft)}.c{text-align:center}
 .qty{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--br)}
 .qty span{display:flex;align-items:center;gap:10px}.qty button{width:32px;height:32px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font-size:18px;cursor:pointer}
 .dot{display:inline-block;width:14px;height:14px;border-radius:4px;margin-right:6px;vertical-align:middle}
+.pk{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;margin:10px 0 4px}
+.pk button{border:1.5px solid var(--br);background:var(--card);color:var(--tx);border-radius:12px;padding:8px 6px;cursor:pointer;font:inherit;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+.pk button.on{border-color:var(--pr);background:var(--soft)}
+.pk .im{width:56px;height:56px;border-radius:10px;background:var(--soft);display:grid;place-items:center;overflow:hidden}.pk .im img{width:100%;height:100%;object-fit:contain}
+.pk .im i{width:26px;height:26px;border-radius:8px;display:block}
+.pk b{font-size:12px;line-height:1.2}.pk small{font-size:10px;color:var(--mut)}
+.cor{display:flex;gap:8px;align-items:center;margin:6px 0 2px;font-size:13px}.cor button{border:1.5px solid var(--br);background:var(--card);color:var(--tx);border-radius:99px;padding:5px 12px;cursor:pointer;font:inherit;font-size:13px;display:flex;align-items:center;gap:6px}.cor button.on{border-color:var(--pr);background:var(--soft);font-weight:700}.cor i{width:12px;height:12px;border-radius:50%;display:inline-block;border:1px solid var(--br)}
 .sum{margin:14px 0;display:grid;gap:6px}.sum div{display:flex;justify-content:space-between}.sum .t{font-weight:800;font-size:20px}
 details{border:1px solid var(--br);border-radius:12px;padding:14px 18px;margin-bottom:8px;background:var(--card)}summary{cursor:pointer;font-weight:600}
 footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--mut)}
@@ -78,8 +85,10 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <section id="precos"><div class="w"><div class="c"><span class="tag">PREÇOS E LUCRO</span><h2>Simule seu pedido e veja quanto você lucra.</h2><p class="mut">Quanto mais você compra, menor o custo por placa.</p></div><br>
 <div class="price"><div><div class="tiers" id="tiers"></div><p class="mut" id="freteNota" style="margin:12px 4px 0"></p></div>
 <div class="card" id="nxSim"><b style="font-size:18px">Seu pedido</b>
+<div style="font-size:13px;font-weight:600;margin-top:10px">1. Escolha a placa</div><div class="pk" id="pk"></div><div class="cor" id="cor" style="display:none"><span>Cor:</span><button type="button" data-c="azul" class="on"><i style="background:#1d4ed8"></i>Azul</button><button type="button" data-c="preta"><i style="background:#111"></i>Preta</button></div><small class="mut" id="pkinfo" style="display:block;margin:4px 0 8px"></small>
+<div style="font-size:13px;font-weight:600;margin-top:6px">2. Quantidade e preço de venda</div>
 <div class="qty"><span>Quantidade de placas</span><span><button type="button" onclick="q('azul',-5)">−</button><input id="qn" type="number" min="0" inputmode="numeric" value="25" style="width:64px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit;font-weight:700"><button type="button" onclick="q('azul',5)">+</button></span></div>
-<div class="qty"><span>Você vende cada placa por</span><span>R$ <input id="pv" inputmode="decimal" value="49,90" style="width:80px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit;font-weight:700"></span></div>
+<div class="qty"><span>Você vende cada placa por</span><span>R$ <input id="pv" inputmode="decimal" value="80,00" style="width:80px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit;font-weight:700"></span></div>
 <div class="sum"><div><span>Custo por placa</span><b id="su"></b></div><div><span>Placas</span><b id="sp"></b></div><div><span id="sfl">Frete</span><b id="sfv"></b></div><div class="t"><span>Total do pedido</span><span id="st"></span></div></div>
 <div id="lucro" style="border:1.5px solid var(--pr);background:var(--soft);border-radius:14px;padding:14px 16px;margin:4px 0 12px"><small class="mut">Seu lucro estimado</small><div style="font-size:28px;font-weight:800;color:var(--pr2,var(--pr));line-height:1.2" id="lt"></div><small class="mut" id="lp"></small></div>
 <small class="mut" id="sh" style="display:block;margin-bottom:8px"></small>
@@ -126,14 +135,30 @@ document.getElementById('wal').href='https://wa.me/'+WHATS;
 ['lnkCriar','lnkCriar2','lnkCriar3'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=registro'});
 function q(c,d){N.azul=Math.max(0,N.azul+d);calc()}
 function pvNum(){var v=parseFloat(String(document.getElementById('pv').value).replace(/\./g,'').replace(',','.'));return isFinite(v)&&v>0?v:0}
-function calc(){var n=N.azul+N.preta,u=n?price(n):0,tem=!!(FQ&&FQ.sel),fr=n&&tem?FRETE:0,custo=n*u,pv=pvNum(),rec=n*pv,luc=rec-custo-fr;
+function calc(){var n=N.azul+N.preta,u=n?unitP(n):0,tem=!!(FQ&&FQ.sel),fr=n&&tem?FRETE:0,custo=n*u,pv=pvNum(),rec=n*pv,luc=rec-custo-fr;
 var qn=document.getElementById('qn');if(document.activeElement!==qn)qn.value=N.azul;
 su.textContent=R(u);sp.textContent=R(custo);sfl.textContent=tem?freteRot().replace(/^f/,'F'):'Frete';sfv.textContent=n?(tem?R(fr):'pelo CEP'):'';st.textContent=R(custo+fr);
 lt.textContent=R(n?luc:0);lt.style.color=luc<0?'#b91c1c':'';
 lp.textContent=n?(pv?'Vendendo '+n+' placas a '+R(pv)+' = '+R(rec)+(n?' · '+R(luc/n)+' por placa · margem de '+(rec?Math.round(luc/rec*100):0)+'%':''):'Informe o preço de venda.')+(tem?'':' · antes do frete'):'';
-var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=n<MINQ?'Pedido mínimo: '+MINQ+' placas'+(n?' — faltam '+(MINQ-n)+'.':'.'):nx?'Com mais '+(nx[0]-n)+' placas, cada uma sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
+ctaPick();var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=n<MINQ?'Pedido mínimo: '+MINQ+' placas'+(n?' — faltam '+(MINQ-n)+'.':'.'):nx?'Com mais '+(nx[0]-n)+' placas, cada uma sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
 document.getElementById('qn').addEventListener('input',function(){N.azul=Math.max(0,parseInt(this.value,10)||0);calc()});
 document.getElementById('pv').addEventListener('input',calc);
+
+var PL=[{id:0,nome:'Avaliações Google',imagem:'/placa.jpg',cor:'#1d4ed8',pedido_ativo:1,usa_tabela:1,google:1}],SELP=PL[0],COR='azul';
+function unitP(n){return SELP&&!SELP.usa_tabela&&SELP.preco!=null?SELP.preco:price(n)}
+function pintaPick(){var pk=document.getElementById('pk');if(!pk)return;
+pk.innerHTML=PL.map(function(p,i){var im=p.imagem?'<img src="'+p.imagem+'" alt="" loading="lazy">':'<i style="background:'+p.cor+'"></i>';
+return '<button type="button" data-i="'+i+'" class="'+(p===SELP?'on':'')+'"><span class="im">'+im+'</span><b>'+p.nome+'</b><small>'+(p.pedido_ativo?'Compra online':'Pelo WhatsApp')+'</small></button>'}).join('');
+pk.querySelectorAll('button').forEach(function(b){b.onclick=function(){SELP=PL[+b.dataset.i];pintaPick();calc()}});
+document.getElementById('cor').style.display=SELP.google?'flex':'none';
+document.querySelectorAll('#cor button').forEach(function(b){b.className=b.dataset.c===COR?'on':'';b.onclick=function(){COR=b.dataset.c;pintaPick()}});
+document.getElementById('pkinfo').textContent=SELP.descricao||''}
+function ctaPick(){var a=document.getElementById('lnkCriar3');if(!a)return;
+if(SELP.pedido_ativo){a.textContent='Criar conta grátis e fazer meu pedido';a.href=APP_URL+'?tab=registro';a.removeAttribute('target')}
+else{var n=N.azul+N.preta;a.textContent='Pedir pelo WhatsApp';a.target='_blank';a.rel='noopener';a.href='https://wa.me/'+WHATS+'?text='+encodeURIComponent('Olá! Quero '+n+' unidades: '+SELP.nome+'.')}}
+(async function(){try{var r=await fetch(API_BASE.replace(/\/api$/,'')+'/api/public/catalogo');var j=await r.json();
+var l=(j.produtos||[]).filter(function(p){return /^Placas/.test(p.categoria)});if(l.length){l.forEach(function(p){p.google=/google/i.test(p.nome)});PL=l;SELP=l.filter(function(p){return p.pedido_ativo})[0]||l[0];pintaPick();calc()}}catch(e){}})();
+pintaPick();
 calc();
 /* frete ao vivo (Melhor Envio) */
 var FQ={cep:'',qtd:0,ops:[],sel:null,busy:false};
