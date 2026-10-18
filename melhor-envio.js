@@ -69,7 +69,7 @@ function pedido(id) {
   o.dest = { name: o.ship_name || o.r_nome, phone: dig(o.ship_phone || o.r_whats), email: o.r_email, postal_code: dig(e ? o.ship_cep : o.addr_cep),
     address: e ? o.ship_street : o.addr_street, number: e ? o.ship_number : o.addr_number, complement: (e ? o.ship_complement : o.addr_complement) || '',
     district: e ? o.ship_district : o.addr_district, city: e ? o.ship_city : o.addr_city, state_abbr: String((e ? o.ship_state : o.addr_state) || '').toUpperCase(), country_id: 'BR' };
-  o.qtd = (o.qty_azul || 0) + (o.qty_preta || 0);
+  o.qtd = (o.qty_azul || 0) + (o.qty_preta || 0) + (o.qty_outras || 0);
   return o;
 }
 const pacotesDe = qtd => Math.max(1, Math.ceil(qtd / Math.max(1, parseInt(embalagem().me_caixa, 10) || 100)));

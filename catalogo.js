@@ -34,10 +34,10 @@ if (!jaSemeou) {
   const P = 'Placas NFC + QR Code', D = 'Displays';
   const itens = [
     [P, 'Avaliações Google — azul e preta', 'NFC + QR Code · leva direto às avaliações do Google', '#1d4ed8', 13.5, 1],
-    [P, 'Placa Pix — preta', 'NFC + QR Code · pagamento por Pix', '#111111', 13.5, 0],
-    [P, 'Instagram — degradê', 'NFC + QR Code · abre o perfil no Instagram', '#d6249f', 13.5, 0],
-    [P, 'Placa acrílica redes sociais 10×10', 'NFC + QR Code · acrílico 10×10 cm', '#7c3aed', 25, 0],
-    [P, 'WhatsApp', 'NFC + QR Code · abre a conversa no WhatsApp', '#22c55e', 13.5, 0],
+    [P, 'Placa Pix — preta', 'NFC + QR Code · pagamento por Pix', '#111111', 13.5, 1],
+    [P, 'Instagram — degradê', 'NFC + QR Code · abre o perfil no Instagram', '#d6249f', 13.5, 1],
+    [P, 'Placa acrílica redes sociais 10×10', 'NFC + QR Code · acrílico 10×10 cm', '#7c3aed', 25, 1],
+    [P, 'WhatsApp', 'NFC + QR Code · abre a conversa no WhatsApp', '#22c55e', 13.5, 1],
     [D, 'Display Google — preto', 'Display de balcão · avaliações do Google', '#111111', 21, 0],
     [D, 'Display Google — branco', 'Display de balcão · avaliações do Google', '#e5e7eb', 21, 0],
     [D, 'Display Instagram 10×14', 'Display de balcão 10×14 cm', '#d6249f', 21, 0],
@@ -49,6 +49,12 @@ if (!jaSemeou) {
     itens.forEach((x, i) => ins.run(x[0], x[1], x[2], x[3], x[4], x[5], i + 1, x[0] === P ? 1 : 0));
     db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('catalogo_seed', '1')").run();
   })();
+}
+
+// Agora todas as placas NFC + QR são pedidas online (checkout do Mercado Pago). Roda uma vez; displays seguem sob consulta.
+if (!db.prepare("SELECT 1 FROM settings WHERE chave = 'catalogo_placas_online'").get()) {
+  db.prepare("UPDATE produtos SET pedido_ativo = 1 WHERE categoria LIKE 'Placas%' AND usa_tabela = 1").run();
+  db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('catalogo_placas_online', '1')").run();
 }
 
 const pastaImg = path.join(path.dirname(db.meta.arquivo), 'catalogo-img');

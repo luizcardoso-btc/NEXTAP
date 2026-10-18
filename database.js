@@ -437,6 +437,19 @@ CREATE TABLE IF NOT EXISTS sales (
   `),
   // v20 — frete de reserva (quando o CEP não tem PAC/SEDEX ou o Melhor Envio falha) passa a ser R$ 31,00. Continua editável no admin.
   db => db.exec(`INSERT INTO settings (chave, valor) VALUES ('frete_fixo', '31.00') ON CONFLICT(chave) DO UPDATE SET valor = '31.00';`),
+  // v21 — pedidos com várias placas (Pix, Instagram, WhatsApp, redes sociais…). Azul/preta do Google seguem em qty_azul/qty_preta;
+  // as demais ficam em order_items e o total delas em orders.qty_outras.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN qty_outras INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      produto_id INTEGER NOT NULL,
+      nome TEXT NOT NULL,
+      qty INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
@@ -527,6 +540,7 @@ db.copiaTemporaria = copiaTemporaria;
 db.listarBackups = listarBackups;
 db.contagens = contagens;
 db.restaurar = restaurar;
+db.itensPedido = id => db.prepare('SELECT produto_id, nome, qty FROM order_items WHERE order_id = ? ORDER BY id').all(id);
 db.integridade = () => db.pragma('quick_check', { simple: true });
 
 module.exports = db;
