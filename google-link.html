@@ -104,7 +104,7 @@ async function recarregar(){pintar(await api('/resellers/google-plano'))}
 function cp(t,b){var ok=function(){var o=b.textContent;b.textContent='Copiado ✓';setTimeout(function(){b.textContent=o},1500)};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,function(){});else{var i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy');ok()}catch(e){}i.remove()}}
 var TIPOS={
- google:{ic:'⭐',nm:'Avaliação Google',bt:'⭐ Gerar link de avaliação',f:[['url','Link do Google da empresa (share.google, Maps, g.page…)','url']]},
+ google:{ic:'⭐',nm:'Avaliação Google',bt:'⭐ Gerar link de avaliação',aj:'Dica: abra a empresa no Google Maps e copie o link da barra de endereço (o mais garantido). Links curtos como share.google e maps.app.goo.gl também funcionam.',f:[['url','Cole aqui o link da empresa no Google','url']]},
  whatsapp:{ic:'💬',nm:'WhatsApp',bt:'💬 Gerar link do WhatsApp',f:[['numero','Número com DDD (ex.: 75 98820-9055)','tel'],['mensagem','Mensagem pronta (opcional)','text']]},
  instagram:{ic:'📸',nm:'Instagram',bt:'📸 Gerar link do Instagram',f:[['perfil','@ do perfil ou link do Instagram','text']]},
  facebook:{ic:'👍',nm:'Facebook',bt:'👍 Gerar link do Facebook',f:[['pagina','Link ou nome da página do Facebook','text']]},
@@ -113,14 +113,15 @@ var TIPOS={
 function chips(){$('chips').innerHTML=Object.keys(TIPOS).map(function(k){return '<button class="btn'+(k===TP?' p':'')+'" onclick="tipo(\''+k+'\')">'+TIPOS[k].ic+' '+TIPOS[k].nm+'</button>'}).join('')}
 function tipo(k){TP=k;chips();$('gerr').textContent='';$('gout').innerHTML='';
   $('campos').innerHTML=TIPOS[k].f.map(function(f){return '<input id="c_'+f[0]+'" type="'+(f[2]==='url'?'text':f[2])+'" '+(f[2]==='url'?'inputmode="url" autocapitalize="off" ':'')+'placeholder="'+E(f[1])+'">'}).join('');
+  if(TIPOS[k].aj)$('campos').insertAdjacentHTML('beforeend','<p class="mut" style="font-size:13px;margin:6px 0 0">'+E(TIPOS[k].aj)+'</p>');
   $('gbt').textContent=TIPOS[k].bt}
 async function converter(){
   $('gerr').textContent='';$('gout').innerHTML='';$('gbt').disabled=true;var t0=$('gbt').textContent;$('gbt').textContent='Gerando…';
   var b={};TIPOS[TP].f.forEach(function(f){b[f[0]]=$('c_'+f[0]).value.trim()});
   try{var r=TP==='google'?await api('/resellers/google-avaliacao',{method:'POST',body:JSON.stringify(b)}):await api('/resellers/conversor',{method:'POST',body:JSON.stringify(Object.assign({tipo:TP},b))});
-    $('gout').innerHTML='<div class="out">'+(r.nome?E(r.nome)+'<br>':'')+E(r.link)+'</div>'+(r.tipo_chave?'<p class="mut" style="margin:0 0 8px">Chave reconhecida como <b>'+E(r.tipo_chave)+'</b>. Se estiver errado, confira os números.</p>':'')+'<div class="row"><button class="btn p" onclick="cp(\''+E(r.link)+'\',this)">Copiar link</button><a class="btn" href="'+E(r.link)+'" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Testar link</a><button class="btn p" onclick="usarPlaca(\''+E(r.link)+'\')">Usar em uma placa</button></div><p class="mut" style="font-size:13px;margin:8px 0 0">Cole este link no destino da placa ou grave direto no NFC.</p>';
+    $('gout').innerHTML='<div class="out">'+(r.nome?E(r.nome)+'<br>':'')+E(r.link)+'</div>'+(r.tipo_chave?'<p class="mut" style="margin:0 0 8px">Chave reconhecida como <b>'+E(r.tipo_chave)+'</b>. Se estiver errado, confira os números.</p>':'')+(TP==='google'&&r.origem&&r.origem!=='ja_era_avaliacao'&&r.origem!=='place_id'?'<p class="mut" style="margin:0 0 8px">✔ Confira se o nome acima é da sua empresa e clique em <b>Testar link</b> antes de gravar na placa.</p>':'')+'<div class="row"><button class="btn p" onclick="cp(\''+E(r.link)+'\',this)">Copiar link</button><a class="btn" href="'+E(r.link)+'" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Testar link</a><button class="btn p" onclick="usarPlaca(\''+E(r.link)+'\')">Usar em uma placa</button></div><p class="mut" style="font-size:13px;margin:8px 0 0">Cole este link no destino da placa ou grave direto no NFC.</p>';
     TIPOS[TP].f.forEach(function(f){$('c_'+f[0]).value=''});recarregar()}
-  catch(e){$('gerr').textContent=e.message;if(e.data&&e.data.limite)$('cPlanos').scrollIntoView({behavior:'smooth'})}
+  catch(e){$('gerr').style.whiteSpace='pre-line';$('gerr').textContent=e.message;if(e.data&&e.data.limite)$('cPlanos').scrollIntoView({behavior:'smooth'})}
   finally{$('gbt').disabled=false;$('gbt').textContent=t0}}
 async function usarPlaca(url){
   var c=$('cPlaca');c.className='card';c.innerHTML='Carregando suas placas…';c.scrollIntoView({behavior:'smooth'});
