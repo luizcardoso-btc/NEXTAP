@@ -85,9 +85,9 @@ footer{border-top:1px solid var(--br);padding:30px 0;font-size:13px;color:var(--
 <section id="precos"><div class="w"><div class="c"><span class="tag">PREÇOS E LUCRO</span><h2>Simule seu pedido e veja quanto você lucra.</h2><p class="mut">Quanto mais você compra, menor o custo por placa.</p></div><br>
 <div class="price"><div><div class="tiers" id="tiers"></div><p class="mut" id="freteNota" style="margin:12px 4px 0"></p></div>
 <div class="card" id="nxSim"><b style="font-size:18px">Seu pedido</b>
-<div style="font-size:13px;font-weight:600;margin-top:10px">1. Escolha a placa</div><div class="pk" id="pk"></div><div class="cor" id="cor" style="display:none"><span>Cor:</span><button type="button" data-c="azul" class="on"><i style="background:#1d4ed8"></i>Azul</button><button type="button" data-c="preta"><i style="background:#111"></i>Preta</button></div><small class="mut" id="pkinfo" style="display:block;margin:4px 0 8px"></small>
-<div style="font-size:13px;font-weight:600;margin-top:6px">2. Quantidade e preço de venda</div>
-<div class="qty"><span>Quantidade de placas</span><span><button type="button" onclick="q('azul',-5)">−</button><input id="qn" type="number" min="0" inputmode="numeric" value="25" style="width:64px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit;font-weight:700"><button type="button" onclick="q('azul',5)">+</button></span></div>
+<div style="font-size:13px;font-weight:600;margin-top:10px">1. Escolha as placas</div><div class="pk" id="pk"></div><div class="cor" id="cor" style="display:none"><span>Google, cor:</span><button type="button" data-c="azul" class="on"><i style="background:#1d4ed8"></i>Azul</button><button type="button" data-c="preta"><i style="background:#111"></i>Preta</button></div><small class="mut" id="pkinfo" style="display:block;margin:4px 0 8px"></small>
+<div style="font-size:13px;font-weight:600;margin-top:6px">2. Quantidades do seu pedido (toque nas placas para adicionar mais de um tipo)</div>
+<div id="cart"></div>
 <div class="qty"><span>Você vende cada placa por</span><span>R$ <input id="pv" inputmode="decimal" value="80,00" style="width:80px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit;font-weight:700"></span></div>
 <div class="sum"><div><span>Custo por placa</span><b id="su"></b></div><div><span>Placas</span><b id="sp"></b></div><div><span id="sfl">Frete</span><b id="sfv"></b></div><div class="t"><span>Total do pedido</span><span id="st"></span></div></div>
 <div id="lucro" style="border:1.5px solid var(--pr);background:var(--soft);border-radius:14px;padding:14px 16px;margin:4px 0 12px"><small class="mut">Seu lucro estimado</small><div style="font-size:28px;font-weight:800;color:var(--pr2,var(--pr));line-height:1.2" id="lt"></div><small class="mut" id="lp"></small></div>
@@ -133,32 +133,41 @@ if(j&&j.tiers&&j.tiers.length){TIERS=j.tiers.map(function(t){return [t.min_qty,t
 document.getElementById('wal').href='https://wa.me/'+WHATS;
 ['lnkEntrar','lnkEntrar2'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=login'});
 ['lnkCriar','lnkCriar2','lnkCriar3'].forEach(function(id){document.getElementById(id).href=APP_URL+'?tab=registro'});
-function q(c,d){N.azul=Math.max(0,N.azul+d);calc()}
 function pvNum(){var v=parseFloat(String(document.getElementById('pv').value).replace(/\./g,'').replace(',','.'));return isFinite(v)&&v>0?v:0}
-function calc(){var n=N.azul+N.preta,u=n?unitP(n):0,tem=!!(FQ&&FQ.sel),fr=n&&tem?FRETE:0,custo=n*u,pv=pvNum(),rec=n*pv,luc=rec-custo-fr;
-var qn=document.getElementById('qn');if(document.activeElement!==qn)qn.value=N.azul;
+function calc(){var n=cartN();N.azul=n;N.preta=0;var u=n?unitP(n):0,tem=!!(FQ&&FQ.sel),fr=n&&tem?FRETE:0,custo=n*u,pv=pvNum(),rec=n*pv,luc=rec-custo-fr;
+pintaCart();
 su.textContent=R(u);sp.textContent=R(custo);sfl.textContent=tem?freteRot().replace(/^f/,'F'):'Frete';sfv.textContent=n?(tem?R(fr):'pelo CEP'):'';st.textContent=R(custo+fr);
 lt.textContent=R(n?luc:0);lt.style.color=luc<0?'#b91c1c':'';
 lp.textContent=n?(pv?'Vendendo '+n+' placas a '+R(pv)+' = '+R(rec)+(n?' · '+R(luc/n)+' por placa · margem de '+(rec?Math.round(luc/rec*100):0)+'%':''):'Informe o preço de venda.')+(tem?'':' · antes do frete'):'';
 ctaPick();var nx=TIERS.filter(function(t){return t[0]>n})[0];sh.textContent=n<MINQ?'Pedido mínimo: '+MINQ+' placas'+(n?' — faltam '+(MINQ-n)+'.':'.'):nx?'Com mais '+(nx[0]-n)+' placas, cada uma sai por '+R(nx[2])+'.':'Você já tem o melhor preço!'}
-document.getElementById('qn').addEventListener('input',function(){N.azul=Math.max(0,parseInt(this.value,10)||0);calc()});
 document.getElementById('pv').addEventListener('input',calc);
 
-var PL=[{id:0,nome:'Avaliações Google',imagem:'/placa.jpg',cor:'#1d4ed8',pedido_ativo:1,usa_tabela:1,google:1}],SELP=PL[0],COR='azul';
-function unitP(n){return SELP&&!SELP.usa_tabela&&SELP.preco!=null?SELP.preco:price(n)}
+var PL=[{id:0,nome:'Avaliações Google',imagem:'/placa.jpg',cor:'#1d4ed8',pedido_ativo:1,usa_tabela:1,google:1}],CART=[],COR='azul';
+function cartN(){return CART.reduce(function(a,l){return a+l.qty},0)}
+function unitP(n){var l=CART[0];return l&&CART.length===1&&!l.p.usa_tabela&&l.p.preco!=null?l.p.preco:price(n)}
+function lnome(l){return (l.cor?l.p.nome.replace(/\s*[—-]\s*azul e preta/i,''):l.p.nome)+(l.cor?' — '+(l.cor==='preta'?'Preta':'Azul'):'')}
+function addLinha(p){var cor=p.google?COR:'',k=p.id+'|'+cor,l=CART.filter(function(x){return x.k===k})[0];
+if(l)l.qty+=5;else CART.push({k:k,p:p,cor:cor,qty:10});pintaPick();calc()}
 function pintaPick(){var pk=document.getElementById('pk');if(!pk)return;
-pk.innerHTML=PL.map(function(p,i){var im=p.imagem?'<img src="'+p.imagem+'" alt="" loading="lazy">':'<i style="background:'+p.cor+'"></i>';
-return '<button type="button" data-i="'+i+'" class="'+(p===SELP?'on':'')+'"><span class="im">'+im+'</span><b>'+p.nome+'</b><small>'+(p.pedido_ativo?'Compra online':'Pelo WhatsApp')+'</small></button>'}).join('');
-pk.querySelectorAll('button').forEach(function(b){b.onclick=function(){SELP=PL[+b.dataset.i];pintaPick();calc()}});
-document.getElementById('cor').style.display=SELP.google?'flex':'none';
+pk.innerHTML=PL.map(function(p,i){var im=p.imagem?'<img src="'+p.imagem+'" alt="" loading="lazy">':'<i style="background:'+p.cor+'"></i>';var no=CART.some(function(l){return l.p===p});
+return '<button type="button" data-i="'+i+'" class="'+(no?'on':'')+'"><span class="im">'+im+'</span><b>'+p.nome+'</b><small>'+(p.pedido_ativo?'Compra online':'Pelo WhatsApp')+'</small></button>'}).join('');
+pk.querySelectorAll('button').forEach(function(b){b.onclick=function(){addLinha(PL[+b.dataset.i])}});
+var g=PL.some(function(p){return p.google});document.getElementById('cor').style.display=g?'flex':'none';
 document.querySelectorAll('#cor button').forEach(function(b){b.className=b.dataset.c===COR?'on':'';b.onclick=function(){COR=b.dataset.c;pintaPick()}});
-document.getElementById('pkinfo').textContent=SELP.descricao||''}
+document.getElementById('pkinfo').textContent=CART.length?'':'Toque numa placa para adicionar ao pedido. Pode misturar tipos e cores.'}
+function pintaCart(){var c=document.getElementById('cart');if(!c)return;
+if(c.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
+c.innerHTML=CART.length?CART.map(function(l,i){return '<div class="qty"><span style="min-width:0"><i class="dot" style="background:'+(l.cor==='preta'?'#111':l.p.cor)+';flex:none"></i><em style="font-style:normal;font-size:14px">'+lnome(l)+'</em></span><span style="flex:none"><button type="button" data-i="'+i+'" data-d="-5">−</button><input data-i="'+i+'" type="number" min="1" value="'+l.qty+'" style="width:54px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--br);background:var(--card);color:var(--tx);font:inherit;font-weight:700"><button type="button" data-i="'+i+'" data-d="5">+</button><button type="button" data-i="'+i+'" data-d="x" title="Remover" style="font-size:15px">×</button></span></div>'}).join(''):'<small class="mut">Nenhuma placa escolhida ainda.</small>';
+c.querySelectorAll('button').forEach(function(b){b.onclick=function(){var l=CART[+b.dataset.i],d=b.dataset.d;if(d==='x')CART.splice(+b.dataset.i,1);else l.qty=Math.max(1,l.qty+ +d);pintaPick();calc()}});
+c.querySelectorAll('input').forEach(function(n){n.oninput=function(){CART[+n.dataset.i].qty=Math.max(1,parseInt(n.value,10)||1);calcSemCart()}})}
+function calcSemCart(){var f=pintaCart;pintaCart=function(){};calc();pintaCart=f}
 function ctaPick(){var a=document.getElementById('lnkCriar3');if(!a)return;
-if(SELP.pedido_ativo){a.textContent='Criar conta grátis e fazer meu pedido';a.href=APP_URL+'?tab=registro';a.removeAttribute('target')}
-else{var n=N.azul+N.preta;a.textContent='Pedir pelo WhatsApp';a.target='_blank';a.rel='noopener';a.href='https://wa.me/'+WHATS+'?text='+encodeURIComponent('Olá! Quero '+n+' unidades: '+SELP.nome+'.')}}
+var off=CART.length&&CART.every(function(l){return l.p.pedido_ativo});
+if(off||!CART.length){a.textContent='Criar conta grátis e fazer meu pedido';a.href=APP_URL+'?tab=registro';a.removeAttribute('target')}
+else{a.textContent='Pedir pelo WhatsApp';a.target='_blank';a.rel='noopener';a.href='https://wa.me/'+WHATS+'?text='+encodeURIComponent('Olá! Quero fazer este pedido:\n'+CART.map(function(l){return '• '+l.qty+'x '+lnome(l)}).join('\n'))}}
 (async function(){try{var r=await fetch(API_BASE.replace(/\/api$/,'')+'/api/public/catalogo');var j=await r.json();
-var l=(j.produtos||[]).filter(function(p){return /^Placas/.test(p.categoria)});if(l.length){l.forEach(function(p){p.google=/google/i.test(p.nome)});PL=l;SELP=l.filter(function(p){return p.pedido_ativo})[0]||l[0];pintaPick();calc()}}catch(e){}})();
-pintaPick();
+var l=(j.produtos||[]).filter(function(p){return /^Placas/.test(p.categoria)});if(l.length){l.forEach(function(p){p.google=/google/i.test(p.nome)});PL=l;var d=l.filter(function(p){return p.pedido_ativo})[0]||l[0];CART=[{k:d.id+'|'+(d.google?'azul':''),p:d,cor:d.google?'azul':'',qty:10}];pintaPick();calc()}}catch(e){}})();
+CART=[{k:'0|azul',p:PL[0],cor:'azul',qty:10}];pintaPick();
 calc();
 /* frete ao vivo (Melhor Envio) */
 var FQ={cep:'',qtd:0,ops:[],sel:null,busy:false};
