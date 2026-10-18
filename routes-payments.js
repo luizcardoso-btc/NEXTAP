@@ -128,10 +128,22 @@ router.post('/checkout', requireReseller, async (req, res) => {
   if (!Number.isInteger(qty_azul) || !Number.isInteger(qty_preta) || qty_azul < 0 || qty_preta < 0) {
     return res.status(400).json({ error: 'Quantidades inválidas.' });
   }
-  const qty = qty_azul + qty_preta;
+  // Demais placas (Pix, Instagram, WhatsApp, redes sociais…): [{ produto_id, qty }]. Só placas ativas que seguem a tabela de preços.
+  const itens = [];
+  if (body.itens != null && !Array.isArray(body.itens)) return res.status(400).json({ error: 'Itens do pedido inválidos.' });
+  for (const it of (body.itens || [])) {
+    const pid = Number(it && it.produto_id), q = Number(it && it.qty);
+    if (!Number.isInteger(pid) || !Number.isInteger(q) || q < 1 || q > 100000) return res.status(400).json({ error: 'Itens do pedido inválidos.' });
+    const p = db.prepare("SELECT id, nome, usa_tabela FROM produtos WHERE id = ? AND ativo = 1 AND categoria LIKE 'Placas%'").get(pid);
+    if (!p || !p.usa_tabela) return res.status(400).json({ error: 'Um dos produtos escolhidos não está disponível para pedido online.' });
+    const ja = itens.find(x => x.produto_id === pid);
+    if (ja) ja.qty += q; else itens.push({ produto_id: p.id, nome: p.nome, qty: q });
+  }
+  const qty_outras = itens.reduce((s, x) => s + x.qty, 0);
+  const qty = qty_azul + qty_preta + qty_outras;
   if (qty < 1) return res.status(400).json({ error: 'Escolha ao menos 1 placa.' });
   const minimo = db.prepare('SELECT MIN(min_qty) AS m FROM price_tiers').get().m || 1;
-  if (qty < minimo) return res.status(400).json({ error: `O pedido mínimo é de ${minimo} placas (azuis, pretas ou as duas juntas). Você escolheu ${qty}.` });
+  if (qty < minimo) return res.status(400).json({ error: `O pedido mínimo é de ${minimo} placas (de qualquer tipo de placa, juntas). Você escolheu ${qty}.` });
   if (qty > 100000) return res.status(400).json({ error: 'Quantidade acima do permitido.' });
   if (!['pix', 'credit_card'].includes(method)) return res.status(400).json({ error: 'Forma de pagamento inválida.' });
   if (!payer || !payer.email || !payer.first_name) {
@@ -160,12 +172,14 @@ router.post('/checkout', requireReseller, async (req, res) => {
   const reseller = db.prepare('SELECT * FROM resellers WHERE id = ?').get(req.resellerId);
 
   const orderInfo = db.prepare(
-    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee,
+    `INSERT INTO orders (reseller_id, qty_azul, qty_preta, qty_outras, unit_price, total, status, payment_method, shipping_fee,
        shipping_service, me_servico_id, ship_name, ship_phone, ship_cep, ship_street, ship_number, ship_complement, ship_district, ship_city, ship_state)
-     VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(req.resellerId, qty_azul, qty_preta, price, total, method, frete, fr.nome || null, fr.servicoId,
+     VALUES (?, ?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(req.resellerId, qty_azul, qty_preta, qty_outras, price, total, method, frete, fr.nome || null, fr.servicoId,
         ship.name, ship.phone, ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state);
   const orderId = orderInfo.lastInsertRowid;
+  const insItem = db.prepare('INSERT INTO order_items (order_id, produto_id, nome, qty) VALUES (?, ?, ?, ?)');
+  itens.forEach(x => insItem.run(orderId, x.produto_id, x.nome, x.qty));
   // Guarda como endereço padrão do revendedor (o próximo checkout já vem preenchido).
   db.prepare(`UPDATE resellers SET addr_cep=?, addr_street=?, addr_number=?, addr_complement=?, addr_district=?, addr_city=?, addr_state=? WHERE id=?`)
     .run(ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state, req.resellerId);
@@ -234,6 +248,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
     console.error(`[MP] Falha ao criar pagamento (${method}, pedido ${orderId}): ${descreverErroMP(err)}`);
     if (dica) console.error(`[MP] O QUE FAZER: ${dica}`);
     // Nenhum pagamento foi criado, então descarta a tentativa (não fica pedido "cancelado" sujando a lista).
+    db.prepare('DELETE FROM order_items WHERE order_id=? AND EXISTS (SELECT 1 FROM orders WHERE id=? AND mp_payment_id IS NULL)').run(orderId, orderId);
     db.prepare('DELETE FROM orders WHERE id=? AND mp_payment_id IS NULL').run(orderId);
     return res.status(502).json({ error: cliente });
   }

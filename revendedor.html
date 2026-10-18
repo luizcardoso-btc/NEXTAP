@@ -99,7 +99,9 @@ var WHATS = "5575988209055";
 
 var $=function(i){return document.getElementById(i)};
 var TOKEN=null, ME=null, TIERS=[], PLATES=[], SALES=[], ORDERS=[];
-var per='all',cur='dash',mode='c',N={azul:10,preta:10},selPl=0,pollTimer=null;
+var per='all',cur='dash',mode='c',N={azul:10,preta:10};
+function qtot(){return N.azul+N.preta+(typeof nxExtraQty==='function'?nxExtraQty():0)}
+var selPl=0,pollTimer=null;
 var LES=['Como ativar uma placa (NFC + QR Code dinâmico)','Como proteger sua tag NFC com senha','Como configurar o NFC','Como usar a plataforma','Como apresentar a placa ao cliente'];
 
 function R(n){return (n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
@@ -293,14 +295,14 @@ try{await api('/resellers/sales',{method:'POST',body:JSON.stringify({client_name
 async function dlS(id){if(!confirm('Excluir venda?'))return;try{await api('/resellers/sales/'+id,{method:'DELETE'});await loadSales();draw()}catch(e){alert(e.message)}}
 
 /* ---- comprar (checkout real com Mercado Pago) ---- */
-function vComprar(){head('Comprar placas','Quanto mais você compra, menor o custo por placa.');var n=N.azul+N.preta,u=n?price(n):0;
+function vComprar(){head('Comprar placas','Quanto mais você compra, menor o custo por placa.');var n=qtot(),u=n?price(n):0;
 return '<div class="g2"><div class="card"><h3>Tabela de preços</h3>'+TIERS.map(function(t){var l=t.max_qty>=1000000?t.min_qty+' a ∞ placas':t.min_qty===t.max_qty?t.min_qty+' placa'+(t.min_qty>1?'s':''):t.min_qty+' a '+t.max_qty+' placas';return '<div class="tier '+(n>=t.min_qty&&n<=t.max_qty?'on':'')+'"><span>'+l+'</span><span>'+R(t.unit_price)+'</span></div>'}).join('')+'<small class="mut">Pedido mínimo: <b style="color:var(--tx)">'+minQ()+' placas</b> (azuis, pretas ou as duas juntas).<br>Acrílico 2 mm · 10×10 cm · NFC + QR Code dinâmico · fita dupla face</small></div>'+
 '<div class="card"><h3>Seu pedido</h3>'+['azul','preta'].map(function(c){return '<div class="qty"><span><i class="sw" style="background:'+(c==='azul'?'#1d4ed8':'#111')+'"></i>Placa '+c+'</span><span><button onclick="q(\''+c+'\',-1)">−</button> <b style="display:inline-block;min-width:34px;text-align:center">'+N[c]+'</b> <button onclick="q(\''+c+'\',1)">+</button></span></div>'}).join('')+'<div class="qty"><span>Quantidade</span><b>'+n+'</b></div><div class="qty"><span>Por placa</span><b>'+R(u)+'</b></div><div class="qty"><span>Placas</span><b>'+R(n*u)+'</b></div><div class="qty"><span>Frete (envio)</span><b style="font-size:13px;font-weight:600">calculado pelo CEP</b></div><div class="qty"><span><b>Total</b></span><b style="font-size:20px">'+R(n?n*u:0)+'</b></div><div class="mut" style="text-align:right;font-size:12px;margin-top:-4px">+ frete ao finalizar</div><br>'+(n<minQ()?'<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam '+(minQ()-n)+' placa(s) para o pedido mínimo de '+minQ()+'.</p>':'')+'<button class="btn p" style="width:100%" '+(n<minQ()?'disabled':'')+' onclick="openCheckout()">Fazer pedido</button><small class="mut">Pagamento via Pix ou cartão de crédito, processado pelo Mercado Pago.<br><b style="color:var(--tx)">Frete:</b> calculado pelo CEP de entrega (Correios e transportadoras), ao finalizar o pedido.<br><b style="color:var(--tx)">Prazo:</b> produção em até '+prazoProd()+' dias úteis após a confirmação do pagamento, mais o prazo dos Correios. Você acompanha tudo em “Meus pedidos”.</small></div></div>'}
 function q(c,d){N[c]=Math.max(0,N[c]+d);draw()}
 var LASTFORM=null,cepLast='';
 function fl(id,label,val,extra){return '<label>'+label+'<input id="'+id+'" value="'+E(val||'')+'" '+(extra||'')+'></label>'}
 function openCheckout(pre){
-  var n=N.azul+N.preta;if(!n)return alert('Escolha ao menos 1 placa.');if(n<minQ())return alert('O pedido mínimo é de '+minQ()+' placas. Você escolheu '+n+'.');
+  var n=qtot();if(!n)return alert('Escolha ao menos 1 placa.');if(n<minQ())return alert('O pedido mínimo é de '+minQ()+' placas. Você escolheu '+n+'.');
   var u=price(n),f=pre||LASTFORM||{},a=f.ship||{};
   var fname=f.first_name!=null?f.first_name:ME.name.split(' ')[0],lname=f.last_name!=null?f.last_name:ME.name.split(' ').slice(1).join(' ');
   var g=function(k,dflt){return a[k]!=null?a[k]:(dflt||'')};
@@ -326,15 +328,15 @@ function openCheckout(pre){
   $('p4').value=f.method||'pix';
   FQ={cep:'',qtd:n,ops:[],sel:null,busy:false,aviso:''};FRETE=0;pintaFrete();cotarFrete();
 }
-function ckTot(){var n=N.azul+N.preta,u=price(n),f=FQ.sel?FQ.sel.preco:0;return n+' placa(s) · '+R(n*u)+' + frete '+(FQ.sel?R(f):'a calcular')+' = <b style="color:var(--tx)">'+R(n*u+f)+'</b>'}
+function ckTot(){var n=qtot(),u=price(n),f=FQ.sel?FQ.sel.preco:0;return n+' placa(s) · '+R(n*u)+' + frete '+(FQ.sel?R(f):'a calcular')+' = <b style="color:var(--tx)">'+R(n*u+f)+'</b>'}
 function freteHtml(){
   if(FQ.busy)return '📦 <span class="mut">Calculando o frete…</span>';
   if(!FQ.ops.length)return '📦 <span class="mut">Informe o CEP para calcular o frete (Correios e transportadoras).</span>';
-  var n=N.azul+N.preta;
+  var n=qtot();
   return '📦 <b>Escolha o frete</b>'+(FQ.aviso?'<br><small class="mut">'+E(FQ.aviso)+'</small>':'')+FQ.ops.map(function(o,i){return '<label style="display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid rgba(128,128,128,.25);margin:0"><input type="radio" name="fsv" style="width:auto" '+(FQ.sel&&FQ.sel.id===o.id?'checked':'')+' onchange="escolheFrete('+i+')"><span style="flex:1">'+E(o.nome)+(o.prazo?' <small class="mut">· '+o.prazo+' dia(s) úteis</small>':'')+'</span><b>'+R(o.preco)+'</b></label>'}).join('')+'<span class="mut">Total com frete: <b style="color:var(--tx)">'+R(n*price(n)+(FQ.sel?FQ.sel.preco:0))+'</b></span>'}
 function pintaFrete(){var f=$('frl');if(f)f.innerHTML=freteHtml();var t=$('ckTot');if(t)t.innerHTML=ckTot()}
 function escolheFrete(i){FQ.sel=FQ.ops[i];FRETE=FQ.sel.preco;pintaFrete()}
-async function cotarFrete(){var i=$('e3');if(!i)return;var d=i.value.replace(/\D/g,''),n=N.azul+N.preta;
+async function cotarFrete(){var i=$('e3');if(!i)return;var d=i.value.replace(/\D/g,''),n=qtot();
   if(d.length!==8){FQ={cep:'',qtd:n,ops:[],sel:null,busy:false,aviso:''};FRETE=0;pintaFrete();return}
   FQ.cep=d;FQ.qtd=n;FQ.busy=true;FQ.ops=[];FQ.sel=null;pintaFrete();
   try{var r=await api('/frete/cotar',{method:'POST',body:JSON.stringify({cep:d,qtd:n})});FQ.ops=r.opcoes||[];FQ.aviso=r.aviso||'';FQ.sel=FQ.ops[0]||null;FRETE=FQ.sel?FQ.sel.preco:0}
@@ -363,11 +365,12 @@ async function doCheckout(){
   if(ship.phone.replace(/\D/g,'').length<10){$('e2').focus();return alert('Telefone inválido: informe com DDD.')}
   if(FQ.busy)return alert('Aguarde o cálculo do frete.');
   if(!FQ.sel)return alert('Não foi possível calcular o frete para este CEP. Confira o CEP e tente de novo.');
-  var body={qty_azul:N.azul,qty_preta:N.preta,method:LASTFORM.method,shipping:ship,frete_servico:FQ.sel.id,frete_esperado:FQ.sel.preco,payer:{first_name:LASTFORM.first_name,last_name:LASTFORM.last_name,email:LASTFORM.email,cpf:LASTFORM.cpf}};
+  var body={qty_azul:N.azul,qty_preta:N.preta,itens:(typeof nxItens==='function'?nxItens():[]),method:LASTFORM.method,shipping:ship,frete_servico:FQ.sel.id,frete_esperado:FQ.sel.preco,payer:{first_name:LASTFORM.first_name,last_name:LASTFORM.last_name,email:LASTFORM.email,cpf:LASTFORM.cpf}};
   mo('<h3 style="margin:0">Processando…</h3><p class="mut">Só um instante, estamos gerando seu pagamento.</p>');
   try{
     var r=await api('/payments/checkout',{method:'POST',body:JSON.stringify(body)});
     try{ME=await api('/resellers/me')}catch(e){}
+    if(typeof nxLimpa==='function')nxLimpa();
     if(body.method==='pix'){showPix(r)}else{
       mo('<h3 style="margin:0">Pagamento por cartão</h3><p class="mut">Total: '+R(r.total)+'</p><p>Uma nova aba vai abrir para você concluir o pagamento com segurança no Mercado Pago.</p><div class="row"><a class="btn p" href="'+r.checkout_url+'" target="_blank" rel="noopener">Ir para o pagamento</a><button class="btn" onclick="cl()">Fechar</button></div>');
     startPoll(r.order_id);
@@ -418,9 +421,9 @@ function passos(o){
 function vPedidos(){head('Meus pedidos','Acompanhe o pagamento e a entrega das suas placas.');
   var pend=ORDERS.filter(function(o){return o.status==='aguardando_pagamento'});
   var av=pend.length?'<div class="card" style="border-color:#f59e0b;margin-top:14px"><b>'+pend.length+' pedido(s) aguardando pagamento.</b> <span class="mut">Assim que o pagamento for confirmado, suas placas aparecem em “Minhas placas” automaticamente.</span></div>':'';
-  return av+'<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Total</th><th>Pagamento</th><th>Andamento do pedido</th><th>Entrega</th><th>Status</th><th></th></tr>'+(ORDERS.length?ORDERS.map(function(o){
+  return av+'<div class="card"><div class="tw"><table><tr><th>Pedido</th><th>Data</th><th>Azul</th><th>Preta</th><th>Outras</th><th>Total</th><th>Pagamento</th><th>Andamento do pedido</th><th>Entrega</th><th>Status</th><th></th></tr>'+(ORDERS.length?ORDERS.map(function(o){
     var acao=o.status==='aguardando_pagamento'?'<button class="btn s p" onclick="reabrirPag('+o.id+')">'+(o.payment_method==='pix'?'Ver Pix / pagar':'Pagar agora')+'</button>':'';
-    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td>'+R(o.total)+(o.shipping_fee>0?'<br><small class="mut">inclui frete '+R(o.shipping_fee)+'</small>':'')+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
+    return '<tr><td>#'+String(o.id).padStart(5,'0')+'</td><td>'+fd(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td style="font-size:12px">'+((o.itens||[]).map(function(i){return i.qty+'× '+E(i.nome)}).join('<br>')||'—')+'</td><td>'+R(o.total)+(o.shipping_fee>0?'<br><small class="mut">inclui frete '+R(o.shipping_fee)+'</small>':'')+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+passos(o)+'</td><td>'+(o.ship_city?E(o.ship_city)+'/'+E(o.ship_state):'—')+'</td><td>'+stTag(o.status)+'</td><td>'+acao+'</td></tr>'}).join(''):'<tr><td colspan="10" class="mut">Nenhum pedido ainda.</td></tr>')+'</table></div></div>'}
 async function reabrirPag(id){
   try{var r=await api('/payments/orders/'+id+'/pagamento');
     if(r.metodo==='pix'&&(r.pix_qr_code||r.pix_qr_base64)){showPix({order_id:r.order_id,total:r.total,pix_qr_code:r.pix_qr_code,pix_qr_base64:r.pix_qr_base64})}

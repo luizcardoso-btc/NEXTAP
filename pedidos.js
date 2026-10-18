@@ -38,6 +38,7 @@ function gerarPlacas(orderId) {
   };
   for (let i = 0; i < order.qty_azul; i++) criar('azul');
   for (let i = 0; i < order.qty_preta; i++) criar('preta');
+  for (const it of db.itensPedido(order.id)) for (let i = 0; i < it.qty; i++) criar(it.nome); // demais placas: a "cor" guarda o nome do produto
   try { estoque.verificarReposicao(); } catch (e) { console.error('[QR-ESTOQUE] reposição automática falhou:', e.message); }
 }
 
@@ -241,7 +242,7 @@ function decorarPublico(o) { const x = decorar(o); for (const k of INTERNOS) del
 
 // Acrescenta ao pedido o que a tela precisa: previsão de envio, atraso e o link de rastreio.
 function decorar(o) {
-  const x = { ...o, prazo_producao_dias: PRAZO_PRODUCAO_DIAS };
+  const x = { ...o, prazo_producao_dias: PRAZO_PRODUCAO_DIAS, itens: db.itensPedido(o.id) };
   if (o.status === 'em_producao' && o.producao_at) {
     x.prazo_envio = adicionarDiasUteis(o.producao_at, PRAZO_PRODUCAO_DIAS);
     x.atrasado = hojeBrasil() > x.prazo_envio;

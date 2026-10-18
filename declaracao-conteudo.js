@@ -91,6 +91,7 @@ function gerarPdf(orderId) {
   const itens = [];
   if (o.qty_azul > 0) itens.push({ desc: `${cfg.decl_descricao} (cor azul)`, qtd: o.qty_azul });
   if (o.qty_preta > 0) itens.push({ desc: `${cfg.decl_descricao} (cor preta)`, qtd: o.qty_preta });
+  db.itensPedido(o.id).forEach(it => itens.push({ desc: `${cfg.decl_descricao} (${it.nome})`, qtd: it.qty }));
   itens.forEach(i => { i.unit = Number(o.unit_price) || 0; i.total = i.unit * i.qtd; });
   const qtdTotal = itens.reduce((s, i) => s + i.qtd, 0);
   const valorTotal = itens.reduce((s, i) => s + i.total, 0);
@@ -234,7 +235,7 @@ api.put('/config', (req, res) => {
 });
 
 api.get('/pedidos', (req, res) => {
-  const rows = db.prepare(`SELECT o.id, o.status, o.qty_azul + o.qty_preta AS qtd, o.total, o.created_at, o.paid_at,
+  const rows = db.prepare(`SELECT o.id, o.status, o.qty_azul + o.qty_preta + o.qty_outras AS qtd, o.total, o.created_at, o.paid_at,
       r.name AS revendedor, o.ship_city, o.ship_state, d.gerada_em, n.numero AS nfe_numero, n.chave AS nfe_chave
     FROM orders o JOIN resellers r ON r.id = o.reseller_id LEFT JOIN declaracoes d ON d.order_id = o.id
     LEFT JOIN nfe_pedido n ON n.order_id = o.id
@@ -253,9 +254,10 @@ api.get('/nfe/:id', (req, res) => {
   const itens = [];
   if (o.qty_azul > 0) itens.push({ desc: 'azul', qtd: o.qty_azul });
   if (o.qty_preta > 0) itens.push({ desc: 'preta', qtd: o.qty_preta });
+  db.itensPedido(id).forEach(it => itens.push({ desc: it.nome, qtd: it.qty }));
   res.json({
     pedido: numPedido(id), status: o.status, destinatario: d.dest.nome, cidade: [d.dest.cidade, d.dest.uf].filter(Boolean).join('/'),
-    qtd: o.qty_azul + o.qty_preta, valor_produtos: Math.round((o.qty_azul + o.qty_preta) * o.unit_price * 100) / 100,
+    qtd: o.qty_azul + o.qty_preta + o.qty_outras, valor_produtos: Math.round((o.qty_azul + o.qty_preta + o.qty_outras) * o.unit_price * 100) / 100,
     frete: o.shipping_fee || 0, nfe: nfeDe(id) || { numero: '', serie: '', chave: '', protocolo: '' },
     remetente_ok: !!lerConfig().rem_nome,
   });
@@ -287,6 +289,7 @@ api.get('/nfe/:id/ficha', (req, res) => {
   const linhas = [];
   if (o.qty_azul > 0) linhas.push([`${cfg.decl_descricao} (cor azul)`, o.qty_azul]);
   if (o.qty_preta > 0) linhas.push([`${cfg.decl_descricao} (cor preta)`, o.qty_preta]);
+  db.itensPedido(id).forEach(it => linhas.push([`${cfg.decl_descricao} (${it.nome})`, it.qty]));
   const pre = '<span style="color:#b91c1c">preencher</span>';
   const v = x => (x ? esc(x) : pre);
   const itens = linhas.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l[0])}</td><td>${pre}</td><td>${pre}</td><td>${l[1]}</td><td>UN</td><td>${BRL(o.unit_price)}</td><td>${BRL(l[1] * o.unit_price)}</td></tr>`).join('');

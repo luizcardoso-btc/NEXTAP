@@ -43,8 +43,8 @@
     } else if (p.preco != null) h += '<div class="pr" style="text-align:left">' + brl(p.preco) + '</div>';
     else h += '<span class="soon">Preço em breve</span>';
     h += '<div style="margin-top:10px"><button class="tg" style="border:0;cursor:pointer;font:inherit;font-weight:700;padding:9px 16px" onclick="event.stopPropagation();nxPick(' + p.id + ')">'
-      + (p.categoria.indexOf('Display') === 0 ? 'Escolher este display' : 'Escolher esta placa') + ' →</button></div>';
-    if (!p.pedido_ativo) h += '<div class="ds" style="margin-top:8px">Esse item é pedido pelo WhatsApp por enquanto; o pagamento online abre em breve.</div>';
+      + (p.usa_tabela ? 'Adicionar ao pedido' : 'Pedir pelo WhatsApp') + ' →</button></div>';
+    if (!p.usa_tabela) h += '<div class="ds" style="margin-top:8px">Esse item é pedido pelo WhatsApp por enquanto; o pagamento online abre em breve.</div>';
     return h + '</div>';
   }
 
@@ -116,21 +116,23 @@
   function refaz() { if (pagina() === 'rev') draw(); else calc(); }
   function achaSim() { return pagina() === 'rev' ? document.getElementById('nxSim') : document.getElementById('nxSim') || (function () { var q = document.getElementById('qa'); var c = q && q.closest('.card'); if (c) c.id = 'nxSim'; return c; })(); }
 
+  var ehGoogleAP = function (p) { return /google/i.test(p.nome) && /azul/i.test(p.nome); }; // a placa que usa as linhas azul/preta
+  window.nxExtraQty = function () { return EX.reduce(function (a, e) { return a + (e.usa_tabela ? e.qty : 0); }, 0); };
+  window.nxItens = function () { return EX.filter(function (e) { return e.usa_tabela; }).map(function (e) { return { produto_id: e.id, qty: e.qty }; }); };
   window.nxPick = function (id) {
     var p = achar(id);
-    if (p.pedido_ativo) { // a placa que já vende hoje: usa as linhas azul/preta do simulador
-      if (N.azul + N.preta === 0) N.azul = QPAD;
-    } else if (!exF(id)) {
-      if (!EX.length) { PREV = { azul: N.azul, preta: N.preta }; N.azul = 0; N.preta = 0; } // escolha nova: começa só com o item clicado
-      EX.push({ id: p.id, nome: p.nome, cor: p.cor, usa_tabela: !!p.usa_tabela, qty: QPAD });
+    if (!p.usa_tabela) { // displays: ainda sem pedido online → WhatsApp
+      window.open('https://wa.me/' + (typeof WHATS !== 'undefined' ? WHATS : '') + '?text=' + encodeURIComponent('Olá! Quero pedir: ' + p.nome), '_blank'); return;
     }
+    if (ehGoogleAP(p)) { if (N.azul + N.preta === 0) N.azul = QPAD; } // placa Google: linhas azul/preta do simulador
+    else if (!exF(id)) EX.push({ id: p.id, nome: p.nome, cor: p.cor, usa_tabela: true, qty: QPAD });
     refaz();
     setTimeout(function () { flash(achaSim()); }, 60);
   };
+  window.nxLimpa = function () { EX = []; PREV = null; };
   window.nxQ = function (id, d) { var e = exF(id); if (!e) return; e.qty = Math.max(1, e.qty + d); refaz(); };
   window.nxX = function (id) {
     EX = EX.filter(function (e) { return e.id !== id; });
-    if (!EX.length && PREV) { N.azul = PREV.azul; N.preta = PREV.preta; PREV = null; }
     refaz();
   };
 
@@ -164,17 +166,6 @@
     var rows = [].slice.call(card.querySelectorAll('.qty'));
     var preta = rows.filter(function (r) { return /^Placa preta/.test(r.textContent.trim()); })[0];
     if (preta) preta.insertAdjacentHTML('afterend', linhasHtml());
-    var t = totais();
-    function set(l, v) { [].slice.call(card.querySelectorAll('.qty')).forEach(function (r) { if (r.firstElementChild && r.firstElementChild.textContent.trim() === l) r.lastElementChild.textContent = v; }); }
-    set('Quantidade', t.n); set('Por placa', R(t.u)); set('Placas', R(t.placas)); set('Frete (envio)', fv(t)); set('Total', R(t.total) + (temFrete() ? '' : ' + frete'));
-    var btn = card.querySelector('button.btn.p'), aviso = card.querySelector('p[style*="b45309"]');
-    if (aviso) aviso.remove();
-    if (btn) {
-      var falta = t.n > 0 && t.n < t.min;
-      btn.outerHTML = (falta ? '<p style="margin:0 0 8px;color:#b45309;font-weight:600">Faltam ' + (t.min - t.n) + ' placa(s) para o pedido mínimo de ' + t.min + '.</p>' : '')
-        + '<a class="btn p" style="width:100%;text-align:center;display:block;text-decoration:none;color:#fff;' + (falta ? 'opacity:.5;pointer-events:none' : '') + '" target="_blank" rel="noopener" href="' + zapUrl() + '">Pedir pelo WhatsApp</a>'
-        + '<small class="mut" style="display:block;margin:6px 0">Os novos produtos ainda não têm pagamento online: o pedido é fechado pelo WhatsApp, já com os itens e o total acima.</small>';
-    }
   }
   function ganchaDraw() {
     if (typeof draw !== 'function' || typeof vComprar !== 'function') return;

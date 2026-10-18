@@ -13,8 +13,8 @@ const um = (sql, ...p) => db.prepare(sql).get(...p);
 function estoque() {
   const entradas = um('SELECT COALESCE(SUM(quantidade),0) n FROM estoque_mov WHERE quantidade > 0').n;
   const saidasAjuste = -um('SELECT COALESCE(SUM(quantidade),0) n FROM estoque_mov WHERE quantidade < 0').n;
-  const enviadas = um("SELECT COALESCE(SUM(qty_azul+qty_preta),0) n FROM orders WHERE status IN ('enviado','entregue')").n;
-  const comprometido = um("SELECT COALESCE(SUM(qty_azul+qty_preta),0) n FROM orders WHERE status IN ('pago','em_producao')").n;
+  const enviadas = um("SELECT COALESCE(SUM(qty_azul+qty_preta+qty_outras),0) n FROM orders WHERE status IN ('enviado','entregue')").n;
+  const comprometido = um("SELECT COALESCE(SUM(qty_azul+qty_preta+qty_outras),0) n FROM orders WHERE status IN ('pago','em_producao')").n;
   const comprado = um("SELECT COALESCE(SUM(quantidade),0) n FROM estoque_mov WHERE tipo='compra'").n;
   const investido = r2(um("SELECT COALESCE(SUM(quantidade*COALESCE(custo_unit,0) + custo_extra),0) n FROM estoque_mov WHERE tipo='compra'").n);
   const emMaos = entradas - saidasAjuste - enviadas;
@@ -41,7 +41,7 @@ function janela(periodo) {
 
 // ---------- custos de UM pedido ----------
 function custosDoPedido(o, cfg) {
-  const qty = o.qty_azul + o.qty_preta;
+  const qty = o.qty_azul + o.qty_preta + (o.qty_outras || 0);
   const frete = o.shipping_fee || 0;
   const recPlacas = r2(o.total - frete);
   const custoPlacas = qty * cfg.custoPlaca;
@@ -120,7 +120,7 @@ function lucro(periodo) {
   });
 
   const dias = Math.max(1, desp.dias);
-  const vendas30 = um("SELECT COALESCE(SUM(qty_azul+qty_preta),0) n FROM orders WHERE status IN " + PAGOS + " AND COALESCE(paid_at,created_at) >= datetime('now','-30 days')").n;
+  const vendas30 = um("SELECT COALESCE(SUM(qty_azul+qty_preta+qty_outras),0) n FROM orders WHERE status IN " + PAGOS + " AND COALESCE(paid_at,created_at) >= datetime('now','-30 days')").n;
   const lucroPlaca = T.placas ? final / T.placas : 0;
   const L = {
     periodo: j.rotulo, chave: String(periodo || 'all'), dias,
