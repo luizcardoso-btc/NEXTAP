@@ -75,7 +75,7 @@
 
   function montaSite() {
     var alvo = document.getElementById('precos');
-    if (!alvo || document.getElementById('catalogo') || !CAT || !CAT.length) return;
+    if (!alvo || pagina() === 'site' || document.getElementById('catalogo') || !CAT || !CAT.length) return;
     var s = document.createElement('section');
     s.id = 'catalogo';
     s.innerHTML = '<div class="w"><div class="c"><span class="tag">NOSSOS PRODUTOS</span><h2>Placas e displays NFC + QR Code para cada tipo de negócio.</h2>'
