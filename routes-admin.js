@@ -163,7 +163,7 @@ router.post('/resellers', async (req, res) => {
 
 router.get('/resellers', (req, res) => {
   const rows = db.prepare(`
-    SELECT r.id, r.name, r.email, r.whatsapp, r.created_at,
+    SELECT r.id, r.name, r.email, r.whatsapp, r.addr_city, r.addr_state, r.created_at,
       (SELECT COUNT(*) FROM orders o WHERE o.reseller_id=r.id) AS pedidos,
       (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.status IN ('pago','em_producao','enviado','entregue')) AS gasto,
       (SELECT COUNT(*) FROM plates p WHERE p.reseller_id=r.id) AS placas,
