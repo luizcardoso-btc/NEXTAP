@@ -209,7 +209,9 @@ router.put('/orders/:id/status', (req, res) => {
 // Custo real do envio (o que você pagou aos Correios). Vazio = não informado (null); inválido = false.
 function lerCusto(v) {
   if (v === undefined || v === null || String(v).trim() === '') return null;
-  const n = Number(String(v).replace(',', '.'));
+  let t = String(v).replace(/R\$|\s/g, '');            // aceita "R$ 32,85", "32,85", "32.85" e "1.234,56"
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t);
   return Number.isFinite(n) && n >= 0 && n <= 5000 ? Math.round(n * 100) / 100 : false;
 }
 router.put('/orders/:id/custo-frete', (req, res) => {
