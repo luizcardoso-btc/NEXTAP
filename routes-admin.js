@@ -214,12 +214,38 @@ function lerCusto(v) {
   const n = Number(t);
   return Number.isFinite(n) && n >= 0 && n <= 5000 ? Math.round(n * 100) / 100 : false;
 }
+function lerValor(v) { // aceita "R$ 1.234,56", "1234,56", "1234.56"
+  let t = String(v).replace(/R\$|\s/g, ''); if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t); return Number.isFinite(n) ? Math.round(n * 100) / 100 : false;
+}
 router.put('/orders/:id/custo-frete', (req, res) => {
   const v = lerCusto((req.body || {}).valor);
   if (v === false) return res.status(400).json({ error: 'Valor inválido.' });
   const r = db.prepare('UPDATE orders SET custo_frete_real = ? WHERE id = ?').run(v, req.params.id);
   if (!r.changes) return res.status(404).json({ error: 'Pedido não encontrado.' });
   res.json({ ok: true });
+});
+
+// Corrigir os valores de um pedido já feito/pago (preço por placa, frete cobrado, total, taxa do Mercado Pago, forma de pagamento).
+// Mexe só no financeiro: quantidades, placas e status continuam como estão. Fica registrado em Dados e backups.
+router.put('/orders/:id/valores', (req, res) => {
+  const o = pegar(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (o.status === 'aguardando_pagamento') return res.status(400).json({ error: 'Pedido ainda não pago: o valor está preso ao pagamento do Mercado Pago. Cancele e refaça, ou confirme o pagamento antes de editar.' });
+  const b = req.body || {};
+  const num = (v, max = 1000000) => { if (v === undefined || v === null || String(v).trim() === '') return null; const n = lerValor(v); return n !== false && n >= 0 && n <= max ? n : false; };
+  const unit = num(b.unit_price), frete = num(b.shipping_fee), total = num(b.total), taxa = num(b.mp_fee);
+  if (unit === false || frete === false || total === false || taxa === false) return res.status(400).json({ error: 'Valor inválido. Use números em reais, ex.: 18,90.' });
+  const qty = o.qty_azul + o.qty_preta + (o.qty_outras || 0);
+  const u = unit !== null ? unit : o.unit_price, f = frete !== null ? frete : (o.shipping_fee || 0);
+  const t = total !== null ? total : Math.round((qty * u + f) * 100) / 100;
+  if (t <= 0) return res.status(400).json({ error: 'O total do pedido precisa ser maior que zero.' });
+  const metodo = ['pix', 'credit_card'].includes(b.payment_method) ? b.payment_method : o.payment_method;
+  const antes = `preço ${o.unit_price}, frete ${o.shipping_fee || 0}, total ${o.total}, taxa MP ${o.mp_fee ?? '—'}`;
+  db.prepare('UPDATE orders SET unit_price=?, shipping_fee=?, total=?, payment_method=?, mp_fee=?, mp_net=? WHERE id=?')
+    .run(u, f, t, metodo, taxa, taxa !== null ? Math.round((t - taxa) * 100) / 100 : null, o.id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: o.id, resultado: 'valores_editados', detalhe: `antes: ${antes} → depois: preço ${u}, frete ${f}, total ${t}, taxa MP ${taxa ?? '—'}` });
+  res.json(resposta(o.id));
 });
 
 // ---- Pedido recebido (pago) → Produção → Enviado (com código dos Correios) → Entregue ----

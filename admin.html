@@ -149,10 +149,10 @@ function vPedidos(){head('Pedidos','Acompanhe o pagamento, a produção e o envi
   var B=function(t,fn,c){return '<button class="btn s'+(c?' p':'')+'" onclick="'+fn+'">'+t+'</button> '};
   var acoes=function(o){
     if(o.status==='aguardando_pagamento')return B('🔄 Conferir','conferirPed('+o.id+')')+B('✔ Confirmar pagamento','confirmarPag('+o.id+')',1)+B('✖ Cancelar','cancelarPed('+o.id+')');
-    if(o.status==='pago')return B('▶ Iniciar produção','iniciarProd('+o.id+')',1)+B('📦 Enviar','abrirEnvio('+o.id+')');
-    if(o.status==='em_producao')return B('📦 Enviar (código)','abrirEnvio('+o.id+')',1)+B('↩','voltar('+o.id+')');
-    if(o.status==='enviado')return B('✔ Marcar entregue','entregar('+o.id+')',1)+B('✎ Rastreio','abrirEnvio('+o.id+',1)')+B('↩','voltar('+o.id+')');
-    if(o.status==='entregue')return B('↩ Desfazer','voltar('+o.id+')');
+    if(o.status==='pago')return B('▶ Iniciar produção','iniciarProd('+o.id+')',1)+B('📦 Enviar','abrirEnvio('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
+    if(o.status==='em_producao')return B('📦 Enviar (código)','abrirEnvio('+o.id+')',1)+B('↩','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
+    if(o.status==='enviado')return B('✔ Marcar entregue','entregar('+o.id+')',1)+B('✎ Rastreio','abrirEnvio('+o.id+',1)')+B('↩','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
+    if(o.status==='entregue')return B('↩ Desfazer','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
     if(o.status==='cancelado')return B('🔄 Conferir','conferirPed('+o.id+')')+B('✔ Confirmar pagamento','confirmarPag('+o.id+')');
     return ''};
   var extra=function(o){var s='';
@@ -169,6 +169,21 @@ function vPedidos(){head('Pedidos','Acompanhe o pagamento, a produção e o envi
   +(lista.length?lista.map(function(o){
     return '<tr><td>'+(o.status==='pago'?'<input type="checkbox" style="width:auto" '+(SEL[o.id]?'checked':'')+' onchange="SEL['+o.id+']=this.checked;draw()">':'')+'</td><td>#'+pad5(o.id)+(typeof docBtns==='function'?'<div style="margin-top:6px;white-space:nowrap">'+docBtns(o)+'</div>':'')+'</td><td>'+E(o.reseller_name)+'</td><td>'+fdh(o.created_at)+'</td><td>'+o.qty_azul+'</td><td>'+o.qty_preta+'</td><td style="font-size:12px">'+itensTxt(o)+'</td><td>'+R(o.total)+(o.shipping_fee>0?'<span class="sm">inclui frete '+R(o.shipping_fee)+'</span>':'')+'</td><td>'+(o.payment_method==='pix'?'Pix':o.payment_method==='credit_card'?'Cartão':'—')+'</td><td>'+(o.paid_at?fdh(o.paid_at)+(o.paid_manually?'<span class="sm" title="'+E(o.payment_note||'')+'">confirmado manualmente</span>':''):'—')+'</td><td>'+(o.ship_street?'<button class="btn s" onclick="verEnt('+o.id+')">📍 '+E(o.ship_city)+'/'+E(o.ship_state)+'</button>':'<span class="mut">—</span>')+'</td><td>'+stTag(o.status)+extra(o)+'</td><td style="white-space:nowrap">'+acoes(o)+'</td></tr>'}).join(''):'<tr><td colspan="12" class="mut">Nenhum pedido nesta situação.</td></tr>')
   +'</table></div><small class="mut">Fluxo: Aguardando pagamento → <b>Pedido recebido</b> (pago) → <b>Em produção</b> (prazo de '+(lista[0]&&lista[0].prazo_producao_dias||5)+' dias úteis) → <b>Enviado</b> (com código de rastreio dos Correios) → <b>Entregue</b>. O revendedor acompanha cada etapa no painel dele.</small></div>'}
+function brIn(v){return v==null||v===''?'':Number(v).toFixed(2).replace('.',',')}
+function nIn(id){var t=String($(id).value).replace(/R\$|\s/g,'');if(t.indexOf(',')>=0)t=t.replace(/\./g,'').replace(',','.');var n=parseFloat(t);return isFinite(n)?n:0}
+function evQtd(o){return o.qty_azul+o.qty_preta+(o.qty_outras||0)}
+function evRecalc(id){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;var t=Math.round((evQtd(o)*nIn('evu')+nIn('evf'))*100)/100;$('evt').value=brIn(t);evResumo(id)}
+function evResumo(id){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;var t=nIn('evt'),tx=$('evx').value.trim()===''?null:nIn('evx');$('evr').innerHTML='Placas: '+evQtd(o)+' × '+R(nIn('evu'))+' = <b>'+R(evQtd(o)*nIn('evu'))+'</b> · frete cobrado '+R(nIn('evf'))+' · total <b>'+R(t)+'</b>'+(tx!=null?' · líquido após taxa '+R(t-tx):'')}
+function editarValores(id){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;
+mo('<h3 style="margin:0">Editar valores · pedido #'+pad5(id)+'</h3><p class="mut" style="margin:0">'+E(o.reseller_name)+' · '+evQtd(o)+' placa(s). Só o financeiro muda; as placas e o andamento do pedido continuam iguais.</p>'
++'<label>Preço por placa (R$)<input id="evu" inputmode="decimal" value="'+brIn(o.unit_price)+'" oninput="evRecalc('+id+')"></label>'
++'<label>Frete cobrado do cliente (R$)<input id="evf" inputmode="decimal" value="'+brIn(o.shipping_fee||0)+'" oninput="evRecalc('+id+')"></label>'
++'<label>Total do pedido (R$) <small class="mut">— recalcula sozinho; se o valor pago foi diferente, digite aqui</small><input id="evt" inputmode="decimal" value="'+brIn(o.total)+'" oninput="evResumo('+id+')"></label>'
++'<label>Taxa do Mercado Pago (R$) <small class="mut">— opcional; em branco o sistema estima</small><input id="evx" inputmode="decimal" value="'+brIn(o.mp_fee)+'" oninput="evResumo('+id+')"></label>'
++'<label>Forma de pagamento<select id="evm"><option value="pix"'+(o.payment_method==='pix'?' selected':'')+'>Pix</option><option value="credit_card"'+(o.payment_method==='credit_card'?' selected':'')+'>Cartão de crédito</option></select></label>'
++'<div id="evr" class="mut" style="font-size:13px"></div>'
++'<div class="row"><button class="btn p" onclick="salvarValores('+id+')">Salvar valores</button><button class="btn" onclick="cl()">Cancelar</button></div>');evResumo(id)}
+async function salvarValores(id){try{await api('/admin/orders/'+id+'/valores',{method:'PUT',body:JSON.stringify({unit_price:$('evu').value,shipping_fee:$('evf').value,total:$('evt').value,mp_fee:$('evx').value,payment_method:$('evm').value})});cl();await loadAll();draw()}catch(e){alert(e.message)}}
 function selTodos(on){ORDERS.filter(function(o){return o.status==='pago'}).forEach(function(o){SEL[o.id]=on});draw()}
 async function loteProd(){var ids=Object.keys(SEL).filter(function(k){return SEL[k]}).map(Number);if(!ids.length)return;
   try{var r=await api('/admin/orders-producao-lote',{method:'POST',body:JSON.stringify({ids:ids})});SEL={};await recarregar();toast(r.iniciados+' pedido(s) em produção ✓')}catch(e){alert(e.message)}}
