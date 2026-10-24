@@ -74,6 +74,7 @@ router.post('/reset', async (req, res) => {
 
 // Login do admin (fornecedor) — credenciais fixas definidas no .env
 router.post('/admin-login', (req, res) => {
+  if (senha.limitado('admin:' + req.ip, 10)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
   const { email, password } = req.body || {};
   const safeEq = (a, b) => {
     const A = Buffer.from(String(a ?? '')), B = Buffer.from(String(b ?? ''));
