@@ -287,4 +287,33 @@ function ajustarPlacas(orderId, cor, alvo) {
   return { criadas: 0, removidas: tirar };
 }
 
-module.exports = { ajustarPlacas, atualizarTaxas, decorar, decorarPublico, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
+// Exclui um pedido (inclusive pago) pelo admin. Placas sem uso voltam ao estoque de QR; se alguma já foi configurada/vendida, só com forcar=true.
+function excluirPedido(orderId, { forcar = false } = {}) {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!o) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
+  const placas = db.prepare('SELECT * FROM plates WHERE order_id = ?').all(orderId);
+  const emUso = pl => !(pl.status === 'estoque' && !pl.client_name && !pl.destination_url)
+    || db.prepare('SELECT 1 FROM sales WHERE plate_id = ?').get(pl.id) || db.prepare('SELECT 1 FROM plate_reads WHERE plate_id = ?').get(pl.id);
+  const usadas = placas.filter(emUso);
+  if (usadas.length && !forcar) throw Object.assign(new Error(`${usadas.length} das placas deste pedido já foram configuradas, vendidas ou lidas pelo revendedor.`), { status: 409, placas_em_uso: usadas.length });
+  const arquivos = db.prepare('SELECT arquivo FROM declaracoes WHERE order_id = ?').all(orderId);
+  db.transaction(() => {
+    const usadasIds = new Set(usadas.map(x => x.id));
+    for (const pl of placas) {
+      if (!usadasIds.has(pl.id)) db.prepare("UPDATE qr_estoque SET status='livre', plate_id=NULL, usado_em=NULL WHERE plate_id = ?").run(pl.id); // QR sem uso volta ao estoque
+      else db.prepare('UPDATE qr_estoque SET plate_id=NULL WHERE plate_id = ?').run(pl.id);                                                    // QR já em uso não é reaproveitado
+      db.prepare('DELETE FROM plate_reads WHERE plate_id = ?').run(pl.id);
+      db.prepare('UPDATE sales SET plate_id = NULL WHERE plate_id = ?').run(pl.id);
+      db.prepare('DELETE FROM plates WHERE id = ?').run(pl.id);
+    }
+    db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
+    db.prepare('DELETE FROM declaracoes WHERE order_id = ?').run(orderId);
+    db.prepare('DELETE FROM nfe_pedido WHERE order_id = ?').run(orderId);
+    db.prepare('DELETE FROM orders WHERE id = ?').run(orderId);
+    registrarEvento({ origem: 'admin', order_id: orderId, resultado: 'pedido_excluido', detalhe: JSON.stringify({ status: o.status, reseller_id: o.reseller_id, azul: o.qty_azul, preta: o.qty_preta, outras: o.qty_outras, total: o.total, frete: o.shipping_fee, mp_payment_id: o.mp_payment_id, placas: placas.length, placas_em_uso: usadas.length }).slice(0, 480) });
+  })();
+  for (const a of arquivos) { try { const fs = require('fs'), path = require('path'); fs.unlinkSync(path.join(path.dirname(db.meta.arquivo), 'declaracoes', path.basename(String(a.arquivo)))); } catch (e) { /* já não existe */ } }
+  return { placas: placas.length, placas_em_uso: usadas.length, mp_payment_id: o.mp_payment_id || null, status: o.status };
+}
+
+module.exports = { excluirPedido, ajustarPlacas, atualizarTaxas, decorar, decorarPublico, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };

@@ -148,12 +148,12 @@ function vPedidos(){head('Pedidos','Acompanhe o pagamento, a produção e o envi
   var lote=(pf==='pago'&&lista.length)?'<div class="row" style="margin-top:10px;align-items:center"><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" style="width:auto" onchange="selTodos(this.checked)"> Selecionar todos</label><button class="btn p" onclick="loteProd()" '+(nSel?'':'disabled')+'>▶ Iniciar produção dos selecionados ('+nSel+')</button></div>':'';
   var B=function(t,fn,c){return '<button class="btn s'+(c?' p':'')+'" onclick="'+fn+'">'+t+'</button> '};
   var acoes=function(o){
-    if(o.status==='aguardando_pagamento')return B('🔄 Conferir','conferirPed('+o.id+')')+B('✔ Confirmar pagamento','confirmarPag('+o.id+')',1)+B('✖ Cancelar','cancelarPed('+o.id+')');
-    if(o.status==='pago')return B('▶ Iniciar produção','iniciarProd('+o.id+')',1)+B('📦 Enviar','abrirEnvio('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
-    if(o.status==='em_producao')return B('📦 Enviar (código)','abrirEnvio('+o.id+')',1)+B('↩','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
-    if(o.status==='enviado')return B('✔ Marcar entregue','entregar('+o.id+')',1)+B('✎ Rastreio','abrirEnvio('+o.id+',1)')+B('↩','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
-    if(o.status==='entregue')return B('↩ Desfazer','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')');
-    if(o.status==='cancelado')return B('🔄 Conferir','conferirPed('+o.id+')')+B('✔ Confirmar pagamento','confirmarPag('+o.id+')');
+    if(o.status==='aguardando_pagamento')return B('🔄 Conferir','conferirPed('+o.id+')')+B('✔ Confirmar pagamento','confirmarPag('+o.id+')',1)+B('✖ Cancelar','cancelarPed('+o.id+')')+B('🗑','excluirPed('+o.id+')');
+    if(o.status==='pago')return B('▶ Iniciar produção','iniciarProd('+o.id+')',1)+B('📦 Enviar','abrirEnvio('+o.id+')')+B('✎ Valores','editarValores('+o.id+')')+B('🗑','excluirPed('+o.id+')');
+    if(o.status==='em_producao')return B('📦 Enviar (código)','abrirEnvio('+o.id+')',1)+B('↩','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')')+B('🗑','excluirPed('+o.id+')');
+    if(o.status==='enviado')return B('✔ Marcar entregue','entregar('+o.id+')',1)+B('✎ Rastreio','abrirEnvio('+o.id+',1)')+B('↩','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')')+B('🗑','excluirPed('+o.id+')');
+    if(o.status==='entregue')return B('↩ Desfazer','voltar('+o.id+')')+B('✎ Valores','editarValores('+o.id+')')+B('🗑','excluirPed('+o.id+')');
+    if(o.status==='cancelado')return B('🔄 Conferir','conferirPed('+o.id+')')+B('✔ Confirmar pagamento','confirmarPag('+o.id+')')+B('🗑','excluirPed('+o.id+')');
     return ''};
   var extra=function(o){var s='';
     if(o.status==='aguardando_pagamento'&&o.mp_status)s='<span class="sm">'+(MPT[o.mp_status]||E(o.mp_status))+'</span>';
@@ -186,6 +186,15 @@ mo('<h3 style="margin:0">Editar valores · pedido #'+pad5(id)+'</h3><p class="mu
 +'<div id="evr" class="mut" style="font-size:13px"></div>'
 +'<div class="row"><button class="btn p" onclick="salvarValores('+id+')">Salvar valores</button><button class="btn" onclick="cl()">Cancelar</button></div>');evResumo(id)}
 async function salvarValores(id){try{await api('/admin/orders/'+id+'/valores',{method:'PUT',body:JSON.stringify({qty_azul:$('eva').value,qty_preta:$('evp').value,unit_price:$('evu').value,shipping_fee:$('evf').value,total:$('evt').value,mp_fee:$('evx').value,payment_method:$('evm').value})});cl();await loadAll();draw()}catch(e){alert(e.message)}}
+function excluirPed(id,forcar){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;
+mo('<h3 style="margin:0;color:#b91c1c">Excluir pedido #'+pad5(id)+'?</h3><p class="mut" style="margin:0">'+E(o.reseller_name)+' · '+evQtd(o)+' placa(s) · '+R(o.total)+' · '+E(o.status.replace(/_/g,' '))+'</p>'
++'<p style="margin:6px 0">Isso <b>apaga o pedido</b> e as placas geradas por ele, e ele sai dos números de faturamento e margem. As placas sem uso voltam ao estoque de QR. Não dá para desfazer (fica só um registro em Dados e backups).</p>'
++(o.status!=='aguardando_pagamento'&&o.mp_payment_id?'<p class="mut" style="margin:6px 0">⚠ O pagamento no Mercado Pago (#'+E(o.mp_payment_id)+') continua existindo lá. Se for devolver o dinheiro, faça o reembolso no Mercado Pago.</p>':'')
++(o.status==='aguardando_pagamento'?'<p class="mut" style="margin:6px 0">⚠ Se o cliente ainda pagar o Pix deste pedido, o pagamento ficará sem pedido.</p>':'')
++(o.me_id?'<p class="mut" style="margin:6px 0">⚠ Há uma etiqueta do Melhor Envio neste pedido; cancele-a lá se não for usar.</p>':'')
++'<div class="row"><button class="btn p" style="background:#b91c1c;border-color:#b91c1c" onclick="confirmaExcluir('+id+','+(forcar?'true':'false')+')">Sim, excluir pedido</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
+async function confirmaExcluir(id,forcar){try{await api('/admin/orders/'+id,{method:'DELETE',body:JSON.stringify({forcar:!!forcar})});cl();await loadAll();draw()}
+catch(e){if(/já foram configuradas|em uso/.test(e.message)&&!forcar){mo('<h3 style="margin:0;color:#b91c1c">Placas já em uso</h3><p style="margin:6px 0">'+E(e.message)+'</p><p class="mut" style="margin:6px 0">Se excluir mesmo assim, o revendedor perde essas placas (configuração, leituras e vínculo com as vendas dele).</p><div class="row"><button class="btn p" style="background:#b91c1c;border-color:#b91c1c" onclick="confirmaExcluir('+id+',true)">Excluir mesmo assim</button><button class="btn" onclick="cl()">Cancelar</button></div>')}else alert(e.message)}}
 function selTodos(on){ORDERS.filter(function(o){return o.status==='pago'}).forEach(function(o){SEL[o.id]=on});draw()}
 async function loteProd(){var ids=Object.keys(SEL).filter(function(k){return SEL[k]}).map(Number);if(!ids.length)return;
   try{var r=await api('/admin/orders-producao-lote',{method:'POST',body:JSON.stringify({ids:ids})});SEL={};await recarregar();toast(r.iniciados+' pedido(s) em produção ✓')}catch(e){alert(e.message)}}

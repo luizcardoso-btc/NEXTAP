@@ -258,6 +258,12 @@ router.put('/orders/:id/valores', (req, res) => {
   res.json(resposta(o.id));
 });
 
+// Excluir pedido (qualquer status, inclusive já pago). Fica registrado em Dados e backups.
+router.delete('/orders/:id', (req, res) => {
+  try { res.json({ ok: true, ...pedidos.excluirPedido(Number(req.params.id), { forcar: !!(req.body && req.body.forcar) }) }); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message, placas_em_uso: e.placas_em_uso }); }
+});
+
 // ---- Pedido recebido (pago) → Produção → Enviado (com código dos Correios) → Entregue ----
 const pegar = id => db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
 const resposta = id => ({ ok: true, order: pedidos.decorar(pegar(id)) });
