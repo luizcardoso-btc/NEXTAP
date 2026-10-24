@@ -171,11 +171,13 @@ function vPedidos(){head('Pedidos','Acompanhe o pagamento, a produção e o envi
   +'</table></div><small class="mut">Fluxo: Aguardando pagamento → <b>Pedido recebido</b> (pago) → <b>Em produção</b> (prazo de '+(lista[0]&&lista[0].prazo_producao_dias||5)+' dias úteis) → <b>Enviado</b> (com código de rastreio dos Correios) → <b>Entregue</b>. O revendedor acompanha cada etapa no painel dele.</small></div>'}
 function brIn(v){return v==null||v===''?'':Number(v).toFixed(2).replace('.',',')}
 function nIn(id){var t=String($(id).value).replace(/R\$|\s/g,'');if(t.indexOf(',')>=0)t=t.replace(/\./g,'').replace(',','.');var n=parseFloat(t);return isFinite(n)?n:0}
-function evQtd(o){return o.qty_azul+o.qty_preta+(o.qty_outras||0)}
+function evQtd(o){return (parseInt(($('eva')||{}).value,10)>=0?parseInt($('eva').value,10):o.qty_azul)+(parseInt(($('evp')||{}).value,10)>=0?parseInt($('evp').value,10):o.qty_preta)+(o.qty_outras||0)}
 function evRecalc(id){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;var t=Math.round((evQtd(o)*nIn('evu')+nIn('evf'))*100)/100;$('evt').value=brIn(t);evResumo(id)}
 function evResumo(id){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;var t=nIn('evt'),tx=$('evx').value.trim()===''?null:nIn('evx');$('evr').innerHTML='Placas: '+evQtd(o)+' × '+R(nIn('evu'))+' = <b>'+R(evQtd(o)*nIn('evu'))+'</b> · frete cobrado '+R(nIn('evf'))+' · total <b>'+R(t)+'</b>'+(tx!=null?' · líquido após taxa '+R(t-tx):'')}
 function editarValores(id){var o=ORDERS.filter(function(x){return x.id===id})[0];if(!o)return;
-mo('<h3 style="margin:0">Editar valores · pedido #'+pad5(id)+'</h3><p class="mut" style="margin:0">'+E(o.reseller_name)+' · '+evQtd(o)+' placa(s). Só o financeiro muda; as placas e o andamento do pedido continuam iguais.</p>'
+mo('<h3 style="margin:0">Editar valores · pedido #'+pad5(id)+'</h3><p class="mut" style="margin:0">'+E(o.reseller_name)+' · '+evQtd(o)+' placa(s). Se mudar a quantidade, as placas ainda sem uso são criadas/removidas; o andamento do pedido continua igual.</p>'
++'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label>Placas azuis<input id="eva" type="number" min="0" value="'+o.qty_azul+'" oninput="evRecalc('+id+')"></label><label>Placas pretas<input id="evp" type="number" min="0" value="'+o.qty_preta+'" oninput="evRecalc('+id+')"></label></div>'
++(o.qty_outras?'<small class="mut">As '+o.qty_outras+' placa(s) de outros modelos não são editadas aqui.</small>':'')
 +'<label>Preço por placa (R$)<input id="evu" inputmode="decimal" value="'+brIn(o.unit_price)+'" oninput="evRecalc('+id+')"></label>'
 +'<label>Frete cobrado do cliente (R$)<input id="evf" inputmode="decimal" value="'+brIn(o.shipping_fee||0)+'" oninput="evRecalc('+id+')"></label>'
 +'<label>Total do pedido (R$) <small class="mut">— recalcula sozinho; se o valor pago foi diferente, digite aqui</small><input id="evt" inputmode="decimal" value="'+brIn(o.total)+'" oninput="evResumo('+id+')"></label>'
@@ -183,7 +185,7 @@ mo('<h3 style="margin:0">Editar valores · pedido #'+pad5(id)+'</h3><p class="mu
 +'<label>Forma de pagamento<select id="evm"><option value="pix"'+(o.payment_method==='pix'?' selected':'')+'>Pix</option><option value="credit_card"'+(o.payment_method==='credit_card'?' selected':'')+'>Cartão de crédito</option></select></label>'
 +'<div id="evr" class="mut" style="font-size:13px"></div>'
 +'<div class="row"><button class="btn p" onclick="salvarValores('+id+')">Salvar valores</button><button class="btn" onclick="cl()">Cancelar</button></div>');evResumo(id)}
-async function salvarValores(id){try{await api('/admin/orders/'+id+'/valores',{method:'PUT',body:JSON.stringify({unit_price:$('evu').value,shipping_fee:$('evf').value,total:$('evt').value,mp_fee:$('evx').value,payment_method:$('evm').value})});cl();await loadAll();draw()}catch(e){alert(e.message)}}
+async function salvarValores(id){try{await api('/admin/orders/'+id+'/valores',{method:'PUT',body:JSON.stringify({qty_azul:$('eva').value,qty_preta:$('evp').value,unit_price:$('evu').value,shipping_fee:$('evf').value,total:$('evt').value,mp_fee:$('evx').value,payment_method:$('evm').value})});cl();await loadAll();draw()}catch(e){alert(e.message)}}
 function selTodos(on){ORDERS.filter(function(o){return o.status==='pago'}).forEach(function(o){SEL[o.id]=on});draw()}
 async function loteProd(){var ids=Object.keys(SEL).filter(function(k){return SEL[k]}).map(Number);if(!ids.length)return;
   try{var r=await api('/admin/orders-producao-lote',{method:'POST',body:JSON.stringify({ids:ids})});SEL={};await recarregar();toast(r.iniciados+' pedido(s) em produção ✓')}catch(e){alert(e.message)}}
