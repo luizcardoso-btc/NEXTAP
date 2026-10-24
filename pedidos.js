@@ -22,23 +22,22 @@ function registrarEvento(e) {
 }
 
 // ---------- placas do pedido (código de rastreio #00001, #00002…) ----------
+function criarPlaca(order, cor, estoque) {
+  const insert = db.prepare(`INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)`);
+  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ? UNION SELECT 1 FROM qr_estoque WHERE numero = ?');
+  const novoCodigo = id => { let n = id, c; do { c = '#' + String(n).padStart(5, '0'); n++; } while (existe.get(c, c)); return c; };
+  const q = estoque.pegar(cor); // QR já numerado e enviado ao fornecedor; sem estoque, gera na hora (como antes)
+  const r = insert.run(order.reseller_id, order.id, q ? q.code : nanoid(10), cor, order.unit_price);
+  db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?').run(q ? q.numero : novoCodigo(Number(r.lastInsertRowid)), r.lastInsertRowid);
+  if (q) estoque.vincular(q.id, r.lastInsertRowid);
+}
 function gerarPlacas(orderId) {
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!order) return;
-  const insert = db.prepare(`INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)`);
   const estoque = require('./estoque-qr.js');
-  const existe = db.prepare('SELECT 1 FROM plates WHERE tracking_code = ? UNION SELECT 1 FROM qr_estoque WHERE numero = ?');
-  const gravaCodigo = db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?');
-  const novoCodigo = id => { let n = id, c; do { c = '#' + String(n).padStart(5, '0'); n++; } while (existe.get(c, c)); return c; };
-  const criar = cor => {
-    const q = estoque.pegar(cor); // QR já numerado e enviado ao fornecedor; sem estoque, gera na hora (como antes)
-    const r = insert.run(order.reseller_id, order.id, q ? q.code : nanoid(10), cor, order.unit_price);
-    gravaCodigo.run(q ? q.numero : novoCodigo(Number(r.lastInsertRowid)), r.lastInsertRowid);
-    if (q) estoque.vincular(q.id, r.lastInsertRowid);
-  };
-  for (let i = 0; i < order.qty_azul; i++) criar('azul');
-  for (let i = 0; i < order.qty_preta; i++) criar('preta');
-  for (const it of db.itensPedido(order.id)) for (let i = 0; i < it.qty; i++) criar(it.nome); // demais placas: a "cor" guarda o nome do produto
+  for (let i = 0; i < order.qty_azul; i++) criarPlaca(order, 'azul', estoque);
+  for (let i = 0; i < order.qty_preta; i++) criarPlaca(order, 'preta', estoque);
+  for (const it of db.itensPedido(order.id)) for (let i = 0; i < it.qty; i++) criarPlaca(order, it.nome, estoque); // demais placas: a "cor" guarda o nome do produto
   try { estoque.verificarReposicao(); } catch (e) { console.error('[QR-ESTOQUE] reposição automática falhou:', e.message); }
 }
 
@@ -264,4 +263,28 @@ async function atualizarTaxas(limite = 80) {
   return r;
 }
 
-module.exports = { atualizarTaxas, decorar, decorarPublico, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
+// Corrige a quantidade de placas de uma cor num pedido já pago (edição pelo admin).
+// Aumentar: cria as placas que faltam. Diminuir: só remove placas ainda sem uso (em estoque, sem cliente, sem venda, sem leitura) e devolve o QR ao estoque.
+function ajustarPlacas(orderId, cor, alvo) {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  const atuais = db.prepare('SELECT * FROM plates WHERE order_id = ? AND color = ? ORDER BY id').all(orderId, cor);
+  if (alvo === atuais.length) return { criadas: 0, removidas: 0 };
+  if (alvo > atuais.length) {
+    const estoque = require('./estoque-qr.js');
+    for (let i = atuais.length; i < alvo; i++) criarPlaca(order, cor, estoque);
+    try { estoque.verificarReposicao(); } catch (e) { /* reposição automática é opcional */ }
+    return { criadas: alvo - atuais.length, removidas: 0 };
+  }
+  const livres = atuais.filter(pl => pl.status === 'estoque' && !pl.client_name && !pl.destination_url
+    && !db.prepare('SELECT 1 FROM sales WHERE plate_id = ?').get(pl.id) && !db.prepare('SELECT 1 FROM plate_reads WHERE plate_id = ?').get(pl.id));
+  const tirar = atuais.length - alvo;
+  if (livres.length < tirar) throw Object.assign(new Error(`Só dá para remover ${livres.length} placa(s) ${cor}: as outras já foram configuradas ou vendidas pelo revendedor.`), { status: 400 });
+  const alvoIds = livres.slice(-tirar).map(pl => pl.id);
+  db.transaction(() => alvoIds.forEach(id => {
+    db.prepare("UPDATE qr_estoque SET status='livre', plate_id=NULL, usado_em=NULL WHERE plate_id = ?").run(id);
+    db.prepare('DELETE FROM plates WHERE id = ?').run(id);
+  }))();
+  return { criadas: 0, removidas: tirar };
+}
+
+module.exports = { ajustarPlacas, atualizarTaxas, decorar, decorarPublico, adicionarDiasUteis, lerRastreio, linkRastreio, PRAZO_PRODUCAO_DIAS, pagamentosSemPedido, marcarPago, gerarPlacas, criarPlacasTeste, registrarEvento, processarNotificacao, conferirPedido, conferirPendentes, cancelarPendente, agendar };
