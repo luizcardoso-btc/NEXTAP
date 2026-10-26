@@ -292,6 +292,33 @@ router.post('/orders-producao-lote', (req, res) => {
   res.json({ iniciados, ignorados: ids.length - iniciados });
 });
 
+// Lançar um orçamento aprovado e já pago como pedido: cria o pedido pago (gera as placas) e coloca em produção.
+router.post('/orcamentos/:id/lancar', (req, res) => {
+  const orc = db.prepare('SELECT * FROM orcamentos WHERE id = ?').get(req.params.id);
+  if (!orc) return res.status(404).json({ error: 'Orçamento não encontrado.' });
+  const b = req.body || {}, nota = `Orçamento N ${String(orc.id).padStart(4, '0')}`;
+  const ja = db.prepare('SELECT id FROM orders WHERE payment_note LIKE ?').get(nota + '%');
+  if (ja) return res.status(409).json({ error: `Este orçamento já foi lançado como pedido #${String(ja.id).padStart(5, '0')}.` });
+  const rev = db.prepare('SELECT id FROM resellers WHERE id = ?').get(Number(b.reseller_id));
+  if (!rev) return res.status(400).json({ error: 'Escolha o revendedor que vai receber as placas.' });
+  const qa = Number(b.qty_azul) || 0, qp = Number(b.qty_preta) || 0;
+  if (!Number.isInteger(qa) || !Number.isInteger(qp) || qa < 0 || qp < 0 || qa + qp < 1) return res.status(400).json({ error: 'Informe quantas placas azuis e/ou pretas (ao menos 1).' });
+  const itens = JSON.parse(orc.itens || '[]'), sub = itens.reduce((a, i) => a + i.qtd * i.unit, 0);
+  const total = Math.round((sub + orc.frete - orc.desconto) * 100) / 100, frete = orc.frete || 0;
+  const unit = Math.round(((total - frete) / (qa + qp)) * 100) / 100;
+  const metodo = ['pix', 'credit_card'].includes(b.payment_method) ? b.payment_method : 'pix';
+  const id = db.transaction(() => {
+    const n = db.prepare(`INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee, ship_name, ship_phone, ship_cep, ship_city, ship_state)
+      VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', ?, ?, ?, ?, ?, ?, ?)`).run(rev.id, qa, qp, unit, total, metodo, frete, orc.cliente_nome, orc.cliente_tel || null, orc.cliente_cep || null, orc.cliente_cidade || null, orc.cliente_uf || null).lastInsertRowid;
+    pedidos.marcarPago(n, { manual: true, nota: nota + ' (pago fora do checkout)' });
+    iniciarProducao(n);
+    return n;
+  })();
+  pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'orcamento_lancado', detalhe: `${nota} → pedido #${id}, ${qa} azul + ${qp} preta, total ${total}` });
+  db.prepare("UPDATE orcamentos SET status='aprovado', atualizado_em=datetime('now') WHERE id=?").run(orc.id);
+  res.json(resposta(id));
+});
+
 // Marcar como enviado, com o código de rastreio dos Correios.
 router.post('/orders/:id/enviar', (req, res) => {
   const id = Number(req.params.id);
