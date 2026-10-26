@@ -237,6 +237,8 @@ router.put('/orders/:id/valores', (req, res) => {
   const unit = num(b.unit_price), frete = num(b.shipping_fee), total = num(b.total), taxa = num(b.mp_fee);
   const qa = b.qty_azul === undefined || b.qty_azul === '' ? o.qty_azul : Number(b.qty_azul), qp = b.qty_preta === undefined || b.qty_preta === '' ? o.qty_preta : Number(b.qty_preta);
   if (!Number.isInteger(qa) || !Number.isInteger(qp) || qa < 0 || qp < 0 || qa > 100000 || qp > 100000) return res.status(400).json({ error: 'Quantidade de placas inválida.' });
+  const custoPago = b.custo_frete === undefined ? undefined : lerCusto(b.custo_frete);
+  if (custoPago === false) return res.status(400).json({ error: 'Frete pago inválido. Informe um valor em reais (ex.: 24,46) ou deixe em branco.' });
   if (unit === false || frete === false || total === false || taxa === false) return res.status(400).json({ error: 'Valor inválido. Use números em reais, ex.: 18,90.' });
   const qty = qa + qp + (o.qty_outras || 0);
   if (qty < 1) return res.status(400).json({ error: 'O pedido precisa ter ao menos 1 placa.' });
@@ -251,6 +253,7 @@ router.put('/orders/:id/valores', (req, res) => {
       if (qp !== o.qty_preta) pedidos.ajustarPlacas(o.id, 'preta', qp);
       db.prepare('UPDATE orders SET qty_azul=?, qty_preta=?, unit_price=?, shipping_fee=?, total=?, payment_method=?, mp_fee=?, mp_net=? WHERE id=?')
         .run(qa, qp, u, f, t, metodo, taxa, taxa !== null ? Math.round((t - taxa) * 100) / 100 : null, o.id);
+      if (custoPago !== undefined) db.prepare('UPDATE orders SET custo_frete_real=? WHERE id=?').run(custoPago, o.id);
       if (qa !== o.qty_azul || qp !== o.qty_preta) db.prepare('DELETE FROM declaracoes WHERE order_id = ?').run(o.id); // a declaração de conteúdo é refeita sozinha com as quantidades novas
     })();
   } catch (e) { return res.status(e.status || 500).json({ error: e.message }); }
