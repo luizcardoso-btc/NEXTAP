@@ -388,6 +388,24 @@ router.get('/payment-events', (req, res) => {
   res.json(db.prepare('SELECT * FROM payment_events ORDER BY id DESC LIMIT 60').all());
 });
 
+// Editar o código (número) de uma placa. O revendedor passa a ver o novo código assim que abrir/atualizar "Minhas placas".
+router.put('/plates/:id/codigo', (req, res) => {
+  const pl = db.prepare('SELECT id, tracking_code FROM plates WHERE id = ?').get(req.params.id);
+  if (!pl) return res.status(404).json({ error: 'Placa não encontrada.' });
+  const d = String((req.body || {}).codigo || '').replace(/\D/g, '');
+  if (!d || d.length > 8) return res.status(400).json({ error: 'Informe o código com até 8 números, por exemplo 133 ou #00133.' });
+  const codigo = '#' + d.padStart(5, '0');
+  if (codigo === pl.tracking_code) return res.json({ ok: true, tracking_code: codigo });
+  if (db.prepare('SELECT 1 FROM plates WHERE tracking_code = ? AND id <> ?').get(codigo, pl.id)) return res.status(409).json({ error: `O código ${codigo} já é de outra placa.` });
+  if (db.prepare('SELECT 1 FROM qr_estoque WHERE numero = ? AND (plate_id IS NULL OR plate_id <> ?)').get(codigo, pl.id)) return res.status(409).json({ error: `O código ${codigo} já está reservado no estoque de QR.` });
+  db.transaction(() => {
+    db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?').run(codigo, pl.id);
+    db.prepare('UPDATE qr_estoque SET numero = ? WHERE plate_id = ?').run(codigo, pl.id); // mantém o estoque de QR coerente com a placa
+    pedidos.registrarEvento({ origem: 'admin', resultado: 'codigo_placa_editado', detalhe: `placa ${pl.id}: ${pl.tracking_code} → ${codigo}` });
+  })();
+  res.json({ ok: true, tracking_code: codigo });
+});
+
 router.get('/plates', (req, res) => {
   const rows = db.prepare(`
     SELECT p.*, r.name AS reseller_name
