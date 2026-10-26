@@ -105,5 +105,20 @@ router.get('/api/admin/placas/exportar', requireAdmin, async (req, res) => {
   } catch (e) { console.error('[EXPORTAR] falha:', e); res.status(500).json({ error: 'Não consegui gerar o arquivo agora.' }); }
 });
 
+// Lista de links de TODAS as placas emitidas (e, opcionalmente, dos QR ainda em estoque) em CSV — para gravar o NFC / conferir o QR de cada placa.
+router.get('/api/admin/placas/links.csv', requireAdmin, (req, res) => {
+  const base = baseUrl(req), cel = v => '"' + String(v == null ? '' : v).replace(/"/g, '""').replace(/[\r\n]+/g, ' ') + '"';
+  const linhas = db.prepare(`SELECT p.tracking_code, p.id, p.code, p.color, p.status, p.client_name, p.plate_label, p.destination_type, p.destination_url, p.order_id,
+      r.name AS revendedor, r.email AS email, o.created_at AS pedido_em FROM plates p JOIN resellers r ON r.id = p.reseller_id LEFT JOIN orders o ON o.id = p.order_id ORDER BY p.id`).all();
+  const cab = ['numero', 'modelo_cor', 'revendedor', 'e-mail', 'pedido', 'situacao', 'cliente_final', 'destino_atual', 'link_qr_nfc'];
+  const out = [cab.join(';')];
+  for (const l of linhas) out.push([l.tracking_code || '#' + String(l.id).padStart(5, '0'), l.color, l.revendedor, l.email, l.order_id ? '#' + String(l.order_id).padStart(5, '0') : 'teste', l.status === 'ativa' ? 'configurada' : 'nao configurada', l.client_name || l.plate_label || '', l.destination_url || '', `${base}/r/${l.code}`].map(cel).join(';'));
+  if (req.query.estoque === '1') {
+    for (const q of db.prepare("SELECT numero, code, cor FROM qr_estoque WHERE status = 'livre' ORDER BY id").all())
+      out.push([q.numero, q.cor, '(estoque, ainda sem revendedor)', '', '', 'em estoque', '', '', `${base}/r/${q.code}`].map(cel).join(';'));
+  }
+  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="nextap-links-das-placas.csv"` }).send('\uFEFF' + out.join('\r\n') + '\r\n');
+});
+
 router.montarZip = montarZip; router.enviarZip = enviarZip; router.baseUrl = baseUrl; router.arq = arq;
 module.exports = router;
