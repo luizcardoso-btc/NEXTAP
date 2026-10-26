@@ -394,7 +394,8 @@ router.get('/plates', (req, res) => {
     FROM plates p JOIN resellers r ON r.id = p.reseller_id
     ORDER BY p.id DESC
   `).all();
-  res.json(rows);
+  const base = require('./exportar-placas.js').baseUrl(req); // mesmo endereço que vai no QR/NFC (SITE_HOST)
+  res.json(rows.map(p => ({ ...p, link: `${base}/r/${p.code}` })));
 });
 
 router.get('/price-tiers', (req, res) => {
