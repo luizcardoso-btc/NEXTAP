@@ -188,6 +188,11 @@ function minQ(){return TIERS.length?TIERS[0].min_qty:1}
 function price(n){for(var i=0;i<TIERS.length;i++)if(n>=TIERS[i].min_qty&&n<=TIERS[i].max_qty)return TIERS[i].unit_price;return TIERS.length?TIERS[0].unit_price:25}
 
 /* ---- navegação ---- */
+
+/* atualiza a lista de placas sozinha (códigos alterados pelo admin aparecem sem recarregar) */
+var _plSig=function(){return PLATES.map(function(p){return p.id+':'+p.tracking_code+':'+p.status}).join('|')};
+async function refrescaPlacas(){if(!TOKEN||cur!=='placas'||document.hidden)return;try{var a=_plSig();await loadPlates();if(cur==='placas'&&_plSig()!==a)draw()}catch(e){}}
+setInterval(refrescaPlacas,25000);document.addEventListener('visibilitychange',refrescaPlacas);window.addEventListener('focus',refrescaPlacas);
 function nav(v){cur=v;document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===(v==='placa'?'placas':v))});draw()}
 function mo(h){$('mb').innerHTML=h;$('mo').style.display='grid'}
 function cl(){$('mo').style.display='none';$('mb').style.maxWidth='';if(pollTimer){clearInterval(pollTimer);pollTimer=null}}
