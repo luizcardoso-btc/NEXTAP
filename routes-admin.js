@@ -406,6 +406,48 @@ router.put('/plates/:id/codigo', (req, res) => {
   res.json({ ok: true, tracking_code: codigo });
 });
 
+// Renumerar várias placas de uma vez: linhas [{de, para}] (código atual → novo). aplicar=false só confere (prévia).
+router.post('/placas/renumerar', (req, res) => {
+  const b = req.body || {}, linhas = Array.isArray(b.linhas) ? b.linhas : [];
+  if (!linhas.length) return res.status(400).json({ error: 'Cole ao menos uma linha, por exemplo: #00133 → #001746' });
+  if (linhas.length > 2000) return res.status(400).json({ error: 'No máximo 2000 linhas por vez.' });
+  const norm = v => { const d = String(v || '').replace(/\D/g, ''); return d && d.length <= 8 ? '#' + d.padStart(5, '0') : null; };
+  const porCodigo = new Map(db.prepare('SELECT id, tracking_code, reseller_id FROM plates').all().map(p => [p.tracking_code, p]));
+  const reservados = new Set(db.prepare("SELECT numero FROM qr_estoque WHERE plate_id IS NULL").all().map(r => r.numero));
+  const itens = [], erros = [], vistosDe = new Set(), vistosPara = new Set();
+  linhas.forEach((l, i) => {
+    const de = norm(l && l.de), para = norm(l && l.para), n = i + 1;
+    if (!de || !para) return erros.push(`Linha ${n}: código inválido.`);
+    const pl = porCodigo.get(de);
+    if (!pl) return erros.push(`Linha ${n}: não existe placa com o código ${de}.`);
+    if (vistosDe.has(de)) return erros.push(`Linha ${n}: a placa ${de} aparece mais de uma vez.`);
+    if (vistosPara.has(para)) return erros.push(`Linha ${n}: o código ${para} aparece mais de uma vez como novo.`);
+    vistosDe.add(de); vistosPara.add(para);
+    itens.push({ id: pl.id, de, para });
+  });
+  const mudando = new Set(itens.map(x => x.de));
+  itens.forEach(x => {
+    if (x.de === x.para) return;
+    const dono = porCodigo.get(x.para);
+    if (dono && !mudando.has(x.para)) erros.push(`O código ${x.para} (novo da placa ${x.de}) já é de outra placa que não está na lista.`);
+    if (reservados.has(x.para)) erros.push(`O código ${x.para} (novo da placa ${x.de}) está reservado no estoque de QR.`);
+  });
+  const alvo = itens.filter(x => x.de !== x.para);
+  if (erros.length || b.aplicar !== true) return res.json({ ok: !erros.length, aplicado: false, total: alvo.length, erros: erros.slice(0, 50), itens: alvo.slice(0, 50) });
+  db.transaction(() => {
+    alvo.forEach(x => { // passo 1: libera os números (trocas entre placas não colidem)
+      db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?').run('~' + x.id, x.id);
+      db.prepare('UPDATE qr_estoque SET numero = ? WHERE plate_id = ?').run('~' + x.id, x.id);
+    });
+    alvo.forEach(x => {
+      db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?').run(x.para, x.id);
+      db.prepare('UPDATE qr_estoque SET numero = ? WHERE plate_id = ?').run(x.para, x.id);
+    });
+    pedidos.registrarEvento({ origem: 'admin', resultado: 'placas_renumeradas', detalhe: `${alvo.length} placa(s): ` + alvo.slice(0, 8).map(x => `${x.de}→${x.para}`).join(', ') });
+  })();
+  res.json({ ok: true, aplicado: true, total: alvo.length, erros: [] });
+});
+
 router.get('/plates', (req, res) => {
   const rows = db.prepare(`
     SELECT p.*, r.name AS reseller_name
