@@ -455,6 +455,11 @@ CREATE TABLE IF NOT EXISTS sales (
     ALTER TABLE orders ADD COLUMN ship_doc TEXT;
     ALTER TABLE resellers ADD COLUMN doc TEXT;
   `),
+  // v23 — pedido "a receber" (ex.: placas liberadas ao próprio perfil, pagas só depois da revenda). Só adiciona.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN a_receber INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN recebido_em TEXT;
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

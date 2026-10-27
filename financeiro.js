@@ -83,7 +83,7 @@ function despesasDoPeriodo(j, primeiraData) {
 // ---------- o cálculo principal ----------
 function lucro(periodo) {
   const j = janela(periodo), cfg = configuracao(), est = estoque();
-  const pedidos = db.prepare(`SELECT * FROM orders WHERE status IN ${PAGOS}
+  const pedidos = db.prepare(`SELECT * FROM orders WHERE status IN ${PAGOS} AND a_receber = 0
       AND COALESCE(paid_at, created_at) <= ? ${j.ini ? 'AND COALESCE(paid_at, created_at) >= ?' : ''} ORDER BY id`).all(...(j.ini ? [j.fim, j.ini] : [j.fim]));
   const T = { pedidos: pedidos.length, placas: 0, receita_placas: 0, frete_cobrado: 0, receita_bruta: 0, custo_placas: 0, icms: 0, taxas_mp: 0, custo_envio: 0,
     taxas_reais: 0, taxas_estimadas: 0, envio_real: 0, envio_estimado: 0, card_valor: 0 };
@@ -102,7 +102,7 @@ function lucro(periodo) {
   const final = lucroBruto - desp.total;
 
   // a receber (pedidos aguardando pagamento) — quanto sobraria se fossem pagos
-  const aw = db.prepare("SELECT * FROM orders WHERE status='aguardando_pagamento' AND created_at >= datetime('now','-14 days')").all();
+  const aw = db.prepare("SELECT * FROM orders WHERE (status='aguardando_pagamento' AND created_at >= datetime('now','-14 days')) OR (a_receber = 1 AND status IN ('pago','em_producao','enviado','entregue'))").all();
   let awLucro = 0, awValor = 0;
   for (const o of aw) { awValor += o.total; awLucro += custosDoPedido(o, cfg).lucro; }
 

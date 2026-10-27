@@ -14,13 +14,13 @@ router.use(requireAdmin);
 
 router.get('/overview', (req, res) => {
   const revendedores = db.prepare('SELECT COUNT(*) AS n FROM resellers').get().n;
-  const faturamento = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().s;
+  const faturamento = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue') AND a_receber = 0").get().s;
   const pendentes = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='aguardando_pagamento'").get().n;
   const placas = db.prepare('SELECT COUNT(*) AS n FROM plates WHERE order_id IS NOT NULL').get().n;
   const ativas = db.prepare("SELECT COUNT(*) AS n FROM plates WHERE status='ativa'").get().n;
-  const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status='aguardando_pagamento'").get().s;
-  const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().n;
-  const freteCobrado = db.prepare("SELECT COALESCE(SUM(shipping_fee),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue')").get().s;
+  const aReceber = db.prepare("SELECT COALESCE(SUM(total),0) AS s FROM orders WHERE status='aguardando_pagamento' OR (a_receber = 1 AND status IN ('pago','em_producao','enviado','entregue'))").get().s;
+  const pagos = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pago','em_producao','enviado','entregue') AND a_receber = 0").get().n;
+  const freteCobrado = db.prepare("SELECT COALESCE(SUM(shipping_fee),0) AS s FROM orders WHERE status IN ('pago','em_producao','enviado','entregue') AND a_receber = 0").get().s;
   res.json({ revendedores, faturamento, frete_cobrado: freteCobrado, a_receber: aReceber, pendentes, pagos, placas, ativas, persistente: db.meta.persistente });
 });
 
@@ -165,7 +165,7 @@ router.get('/resellers', (req, res) => {
   const rows = db.prepare(`
     SELECT r.id, r.name, r.email, r.whatsapp, r.addr_city, r.addr_state, r.created_at,
       (SELECT COUNT(*) FROM orders o WHERE o.reseller_id=r.id) AS pedidos,
-      (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.status IN ('pago','em_producao','enviado','entregue')) AS gasto,
+      (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.a_receber=0 AND o.status IN ('pago','em_producao','enviado','entregue')) AS gasto,
       (SELECT COUNT(*) FROM plates p WHERE p.reseller_id=r.id) AS placas,
       (SELECT COUNT(*) FROM sales s WHERE s.reseller_id=r.id) AS vendas
     FROM resellers r ORDER BY r.id DESC
@@ -304,8 +304,8 @@ router.post('/resellers/:id/liberar-placas', (req, res) => {
   if (unit === null) { const t = db.prepare('SELECT * FROM price_tiers ORDER BY min_qty').all(); const f = t.find(x => qtd >= x.min_qty && qtd <= x.max_qty); unit = f ? f.unit_price : (t.length ? (qtd > t[t.length - 1].max_qty ? t[t.length - 1].unit_price : t[0].unit_price) : 25); }
   const total = Math.round(unit * qtd * 100) / 100;
   const id = db.transaction(() => {
-    const n = db.prepare(`INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee, custo_frete_real, mp_fee, mp_net)
-      VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', 'pix', 0, 0, 0, ?)`).run(rev.id, qa, qp, unit, total, total).lastInsertRowid;
+    const n = db.prepare(`INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee, custo_frete_real, mp_fee, mp_net, a_receber)
+      VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', 'pix', 0, 0, 0, ?, ?)`).run(rev.id, qa, qp, unit, total, total, b.a_receber === false || b.a_receber === 0 || b.a_receber === '0' ? 0 : 1).lastInsertRowid;
     pedidos.marcarPago(n, { manual: true, nota: 'Liberação interna (pago por fora, entregue em mãos)' });
     db.prepare("UPDATE orders SET status='entregue', producao_at=datetime('now'), enviado_at=datetime('now'), entregue_at=datetime('now') WHERE id=?").run(n);
     return n;
@@ -314,6 +314,15 @@ router.post('/resellers/:id/liberar-placas', (req, res) => {
   res.json(resposta(id));
 });
 
+// Recebi o dinheiro de um pedido "a receber": passa a contar no faturamento e no lucro a partir de hoje.
+router.post('/orders/:id/recebido', (req, res) => {
+  const o = pegar(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  if (!o.a_receber) return res.status(409).json({ error: 'Este pedido não está marcado como a receber.' });
+  db.prepare("UPDATE orders SET a_receber = 0, recebido_em = datetime('now'), paid_at = datetime('now') WHERE id = ?").run(o.id);
+  pedidos.registrarEvento({ origem: 'admin', order_id: o.id, resultado: 'recebido', detalhe: `R$ ${o.total}` });
+  res.json(resposta(o.id));
+});
 // Lançar um orçamento aprovado e já pago como pedido: cria o pedido pago (gera as placas) e coloca em produção.
 router.post('/orcamentos/:id/lancar', (req, res) => {
   const orc = db.prepare('SELECT * FROM orcamentos WHERE id = ?').get(req.params.id);
