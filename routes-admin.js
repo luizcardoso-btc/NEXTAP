@@ -292,6 +292,28 @@ router.post('/orders-producao-lote', (req, res) => {
   res.json({ iniciados, ignorados: ids.length - iniciados });
 });
 
+// Liberar placas na conta de um revendedor SEM cobrança de checkout (ex.: o seu perfil pessoal): cria um pedido interno já pago,
+// entregue em mãos, com o preço da tabela (ou o que você definir). Sem taxa do Mercado Pago e sem frete. Entra no financeiro normalmente.
+router.post('/resellers/:id/liberar-placas', (req, res) => {
+  const rev = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
+  if (!rev) return res.status(404).json({ error: 'Revendedor não encontrado.' });
+  const b = req.body || {}, qa = Number(b.qty_azul) || 0, qp = Number(b.qty_preta) || 0, qtd = qa + qp;
+  if (!Number.isInteger(qa) || !Number.isInteger(qp) || qa < 0 || qp < 0 || qtd < 1 || qtd > 5000) return res.status(400).json({ error: 'Informe quantas placas azuis e/ou pretas (ao menos 1).' });
+  let unit = String(b.unit_price ?? '').trim() === '' ? null : lerValor(b.unit_price);
+  if (unit === false || (unit !== null && (unit < 0 || unit > 1000))) return res.status(400).json({ error: 'Preço por placa inválido. Use reais, ex.: 17,50.' });
+  if (unit === null) { const t = db.prepare('SELECT * FROM price_tiers ORDER BY min_qty').all(); const f = t.find(x => qtd >= x.min_qty && qtd <= x.max_qty); unit = f ? f.unit_price : (t.length ? (qtd > t[t.length - 1].max_qty ? t[t.length - 1].unit_price : t[0].unit_price) : 25); }
+  const total = Math.round(unit * qtd * 100) / 100;
+  const id = db.transaction(() => {
+    const n = db.prepare(`INSERT INTO orders (reseller_id, qty_azul, qty_preta, unit_price, total, status, payment_method, shipping_fee, custo_frete_real, mp_fee, mp_net)
+      VALUES (?, ?, ?, ?, ?, 'aguardando_pagamento', 'pix', 0, 0, 0, ?)`).run(rev.id, qa, qp, unit, total, total).lastInsertRowid;
+    pedidos.marcarPago(n, { manual: true, nota: 'Liberação interna (pago por fora, entregue em mãos)' });
+    db.prepare("UPDATE orders SET status='entregue', producao_at=datetime('now'), enviado_at=datetime('now'), entregue_at=datetime('now') WHERE id=?").run(n);
+    return n;
+  })();
+  pedidos.registrarEvento({ origem: 'admin', order_id: id, resultado: 'placas_liberadas', detalhe: `${rev.name}: ${qa} azul + ${qp} preta a ${unit} = ${total}` });
+  res.json(resposta(id));
+});
+
 // Lançar um orçamento aprovado e já pago como pedido: cria o pedido pago (gera as placas) e coloca em produção.
 router.post('/orcamentos/:id/lancar', (req, res) => {
   const orc = db.prepare('SELECT * FROM orcamentos WHERE id = ?').get(req.params.id);
