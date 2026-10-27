@@ -9,7 +9,8 @@ const PLANOS = {
 const DIAS = 30;
 
 function estado(resellerId) {
-  const r = db.prepare('SELECT gl_plano, gl_ate FROM resellers WHERE id = ?').get(resellerId) || {};
+  const r = db.prepare('SELECT gl_plano, gl_ate, cortesia FROM resellers WHERE id = ?').get(resellerId) || {};
+  if (r.cortesia) return { plano: 'ilimitado', nome: 'Ilimitado (cortesia)', ate: null, usados: db.prepare('SELECT COUNT(*) AS n FROM gl_links WHERE reseller_id = ?').get(resellerId).n, limite: null, expirado: false, cortesia: true, planos: [] };
   const vigente = !!(r.gl_plano && PLANOS[r.gl_plano] && r.gl_ate && db.prepare("SELECT ? > datetime('now') AS v").get(r.gl_ate).v);
   const plano = vigente ? r.gl_plano : 'gratis';
   const usados = db.prepare('SELECT COUNT(*) AS n FROM gl_links WHERE reseller_id = ?').get(resellerId).n;

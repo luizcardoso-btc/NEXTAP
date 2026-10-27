@@ -460,6 +460,8 @@ CREATE TABLE IF NOT EXISTS sales (
     ALTER TABLE orders ADD COLUMN a_receber INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE orders ADD COLUMN recebido_em TEXT;
   `),
+  // v24 — cortesia: revendedor com gerador de links ilimitado e biosite sem cobrança (ex.: o perfil pessoal do dono). Só adiciona.
+  db => db.exec(`ALTER TABLE resellers ADD COLUMN cortesia INTEGER NOT NULL DEFAULT 0;`),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

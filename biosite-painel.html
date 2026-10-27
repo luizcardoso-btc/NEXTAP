@@ -101,6 +101,7 @@ async function prev(local){try{if(local&&$('e_t')){/* prévia só de dados já s
 /* ---------- publicar (Pix) ---------- */
 async function publicar(){if(!await salvar())return;var c=$('cPix');c.className='card';c.innerHTML='Gerando Pix…';c.scrollIntoView({behavior:'smooth'});
   try{var x=await api('/biosites/'+ED.id+'/publicar',{method:'POST'});
+    if(x.publicado){ED=Object.assign(ED,x.biosite);editor();prev();window.scrollTo(0,0);return}
     c.innerHTML='<h3>Pague '+R(x.valor)+' no Pix para publicar</h3><p class="mut" style="margin:0">Leia o QR Code no app do banco ou use o copia-e-cola. O biosite entra no ar sozinho assim que o pagamento cair.</p>'
      +(x.pix_qr_base64?'<img class="qr" alt="QR Code Pix" src="data:image/png;base64,'+E(x.pix_qr_base64)+'">':'')+'<input id="pxc" readonly value="'+E(x.pix_qr_code)+'" onclick="this.select()"><button class="btn p" style="width:100%" onclick="cp($(\'pxc\').value,this)">Copiar código Pix</button><p class="mut" id="pxs" style="margin:10px 0 0">Aguardando pagamento…</p>';
     clearInterval(POLL);var n=0;POLL=setInterval(async function(){n++;if(n>180){clearInterval(POLL);return}

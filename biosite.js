@@ -148,6 +148,10 @@ R.post('/:id/publicar', async (req, res) => {
     const b = meu(req); if (!b) throw bad('Biosite não encontrado.', 404);
     if (b.status === 'publicado') throw bad('Este biosite já está publicado.', 409);
     if (!JSON.parse(b.links || '[]').length) throw bad('Adicione pelo menos 1 botão antes de publicar.');
+    if (db.prepare('SELECT cortesia FROM resellers WHERE id = ?').get(req.resellerId)?.cortesia) { // cortesia: publica sem cobrar
+      db.prepare("UPDATE biosites SET status='publicado', publicado_em=COALESCE(publicado_em, datetime('now')), custo_pago=0 WHERE id=?").run(b.id);
+      return res.json({ publicado: true, biosite: dto(db.prepare('SELECT * FROM biosites WHERE id = ?').get(b.id), req) });
+    }
     if (!process.env.MP_ACCESS_TOKEN) throw bad('Pagamento indisponível no momento. Fale com o suporte.', 503);
     const v = x => ({ id: x.id, valor: x.valor, status: x.status, pix_qr_code: x.pix_qr_code, pix_qr_base64: x.pix_qr_base64 });
     const pend = db.prepare("SELECT * FROM biosite_pagamentos WHERE biosite_id = ? AND status = 'pendente' AND mp_payment_id IS NOT NULL AND criado_em > datetime('now','-25 minutes') ORDER BY id DESC").get(b.id);
