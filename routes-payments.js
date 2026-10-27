@@ -154,7 +154,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
     return res.status(400).json({ error: 'Use um e-mail diferente do e-mail da conta do Mercado Pago que recebe os pagamentos.' });
   }
   const cpf = String(payer.cpf || '').replace(/\D/g, '');
-  if (cpf && cpf.length !== 11) return res.status(400).json({ error: 'CPF inválido. Informe os 11 números ou deixe em branco.' });
+  if (cpf && cpf.length !== 11 && cpf.length !== 14) return res.status(400).json({ error: 'CPF/CNPJ inválido. Informe os 11 números do CPF ou os 14 do CNPJ.' });
 
   const entrega = lerEntrega(body.shipping);
   if (entrega.erro) return res.status(400).json({ error: entrega.erro });
@@ -178,6 +178,10 @@ router.post('/checkout', requireReseller, async (req, res) => {
   ).run(req.resellerId, qty_azul, qty_preta, qty_outras, price, total, method, frete, fr.nome || null, fr.servicoId,
         ship.name, ship.phone, ship.cep, ship.street, ship.number, ship.complement, ship.district, ship.city, ship.state);
   const orderId = orderInfo.lastInsertRowid;
+  // CPF/CNPJ do destinatário: o informado agora, ou o que o revendedor já tinha salvo (a etiqueta do Melhor Envio exige).
+  const docDest = cpf || String((reseller && reseller.doc) || '').replace(/\D/g, '');
+  if (docDest) db.prepare('UPDATE orders SET ship_doc = ? WHERE id = ?').run(docDest, orderId);
+  if (cpf) db.prepare('UPDATE resellers SET doc = ? WHERE id = ?').run(cpf, req.resellerId);
   const insItem = db.prepare('INSERT INTO order_items (order_id, produto_id, nome, qty) VALUES (?, ?, ?, ?)');
   itens.forEach(x => insItem.run(orderId, x.produto_id, x.nome, x.qty));
   // Guarda como endereço padrão do revendedor (o próximo checkout já vem preenchido).
@@ -197,7 +201,7 @@ router.post('/checkout', requireReseller, async (req, res) => {
             email: String(payer.email).trim(),
             first_name: payer.first_name,
             last_name: payer.last_name || payer.first_name,
-            ...(cpf ? { identification: { type: 'CPF', number: cpf } } : {}),
+            ...(cpf.length === 11 ? { identification: { type: 'CPF', number: cpf } } : {}),
           },
           ...(base.startsWith('https://') ? { notification_url: `${base}/api/payments/webhook` } : {}),
           external_reference: String(orderId),
