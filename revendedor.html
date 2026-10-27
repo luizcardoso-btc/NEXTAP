@@ -317,7 +317,7 @@ function openCheckout(pre){
   +'<b>Dados do pagamento</b>'
   +'<div style="'+row2+'">'+fl('p1','Nome',fname)+fl('p2','Sobrenome',lname)+'</div>'
   +'<label>E-mail para o pagamento<input id="p3" type="email" value="'+E(f.email||ME.email)+'"></label>'
-  +'<label>CPF (opcional, ajuda na aprovação do Pix)<input id="p5" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" value="'+E(f.cpf||'')+'"></label>'
+  +'<label>CPF ou CNPJ de quem recebe (necessário para a etiqueta de envio)<input id="p5" inputmode="numeric" maxlength="18" placeholder="000.000.000-00" value="'+E(f.cpf||'')+'"></label>'
   +'<label>Forma de pagamento<select id="p4"><option value="pix">Pix</option><option value="credit_card">Cartão de crédito</option></select></label>'
   +'<b style="margin-top:6px">Endereço de entrega</b><small class="mut" style="margin-top:-6px">Enviaremos as placas para este endereço.</small>'
   +fl('e1','Nome de quem vai receber',g('name',ME.name),'autocomplete="name"')
@@ -364,6 +364,7 @@ async function doCheckout(){
   var ship={name:v('e1'),phone:v('e2'),cep:v('e3'),number:v('e4'),street:v('e5'),complement:v('e6'),district:v('e7'),city:v('e8'),state:v('e9').toUpperCase()};
   LASTFORM={first_name:v('p1'),last_name:v('p2'),email:v('p3'),cpf:v('p5'),method:$('p4').value,ship:ship};
   if(!LASTFORM.first_name||!LASTFORM.email)return alert('Preencha nome e e-mail do pagamento.');
+  var dd=(LASTFORM.cpf||'').replace(/\D/g,'');if(dd.length!==11&&dd.length!==14)return alert('Informe o CPF (11 números) ou CNPJ (14 números) de quem recebe. Ele é exigido para emitir a etiqueta de envio.');
   var need=[['name','e1','o nome de quem vai receber'],['phone','e2','o telefone/WhatsApp com DDD'],['cep','e3','o CEP'],['number','e4','o número (ou S/N)'],['street','e5','a rua/avenida'],['district','e7','o bairro'],['city','e8','a cidade'],['state','e9','o estado (UF)']];
   for(var k=0;k<need.length;k++){if(!ship[need[k][0]]){$(need[k][1]).focus();return alert('Informe '+need[k][2]+' da entrega.')}}
   if(ship.cep.replace(/\D/g,'').length!==8){$('e3').focus();return alert('CEP inválido: informe os 8 números.')}

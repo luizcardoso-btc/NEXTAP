@@ -63,7 +63,7 @@ function faltaRemetente(r) {
 }
 function pedido(id) {
   const o = db.prepare(`SELECT o.*, r.name AS r_nome, r.email AS r_email, r.whatsapp AS r_whats, r.addr_cep, r.addr_street, r.addr_number, r.addr_complement,
-    r.addr_district, r.addr_city, r.addr_state FROM orders o JOIN resellers r ON r.id = o.reseller_id WHERE o.id = ?`).get(id);
+    r.addr_district, r.addr_city, r.addr_state, r.doc AS r_doc FROM orders o JOIN resellers r ON r.id = o.reseller_id WHERE o.id = ?`).get(id);
   if (!o) return null;
   const e = o.ship_street || o.ship_cep;
   o.dest = { name: o.ship_name || o.r_nome, phone: dig(o.ship_phone || o.r_whats), email: o.r_email, postal_code: dig(e ? o.ship_cep : o.addr_cep),
@@ -190,12 +190,16 @@ async function comprar(id, servico, docDest, nomeServ, opts = {}) {
   const d = o.dest; for (const [k, n] of [['address', 'rua'], ['number', 'número'], ['district', 'bairro'], ['city', 'cidade'], ['state_abbr', 'UF']]) {
     if (!d[k]) throw Object.assign(new Error(`O endereço do pedido está sem ${n}. Complete antes de comprar a etiqueta.`), { status: 400 });
   }
+  const docFinal = dig(docDest) || dig(o.ship_doc) || dig(o.r_doc);
+  if (docFinal.length !== 11 && docFinal.length !== 14) throw Object.assign(new Error('Falta o CPF ou CNPJ do destinatário. Preencha o CPF/CNPJ no pedido e tente de novo.'), { status: 400 });
+  if (dig(docDest) && dig(docDest) !== dig(o.ship_doc)) db.prepare('UPDATE orders SET ship_doc = ? WHERE id = ?').run(dig(docDest), id);
   // Reserva a compra (evita duas compras ao mesmo tempo para o mesmo pedido).
   const claim = db.prepare("UPDATE orders SET me_status='comprando', me_erro=NULL, me_liberar=? WHERE id=? AND me_id IS NULL AND (me_status IS NULL OR me_status='falhou')").run(liberar, id);
   if (!claim.changes) throw Object.assign(new Error('Já existe uma compra de etiqueta em andamento para este pedido.'), { status: 409 });
   try {
   const c = embalagem(), p = pacote(o), vd = valorDeclarado(o, c);
-  const doc = dig(docDest); const para = { ...d }; if (doc.length === 11) para.document = doc; else if (doc.length === 14) para.company_document = doc;
+  const doc = docFinal;
+  const para = { ...d }; if (doc.length === 11) para.document = doc; else if (doc.length === 14) para.company_document = doc;
   const nfe = db.prepare('SELECT chave FROM nfe_pedido WHERE order_id = ?').get(id);
   const opcoes = { receipt: false, own_hand: false, reverse: false, platform: 'NexTap', tags: [{ tag: 'Pedido #' + String(id).padStart(5, '0'), url: null }] };
   if (vd) opcoes.insurance_value = vd;
@@ -281,6 +285,14 @@ router.put('/api/admin/melhor-envio', requireAdmin, (req, res) => {
   res.json({ ok: true, config: embalagem() });
 });
 router.post('/api/admin/orders/:id/melhor-envio/cotar', requireAdmin, async (req, res) => { try { res.json(await cotar(Number(req.params.id))); } catch (e) { erro(res, e); } });
+router.put('/api/admin/orders/:id/documento', requireAdmin, (req, res) => {
+  const d = dig((req.body || {}).documento);
+  if (d.length !== 11 && d.length !== 14) return res.status(400).json({ error: 'Informe o CPF (11 números) ou o CNPJ (14 números).' });
+  const r = db.prepare('UPDATE orders SET ship_doc = ?, me_erro = CASE WHEN me_erro LIKE \'%CPF%\' OR me_erro LIKE \'%CNPJ%\' THEN NULL ELSE me_erro END WHERE id = ?').run(d, Number(req.params.id));
+  if (!r.changes) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  db.prepare('UPDATE resellers SET doc = COALESCE(NULLIF(doc, \'\'), ?) WHERE id = (SELECT reseller_id FROM orders WHERE id = ?)').run(d, Number(req.params.id));
+  res.json({ ok: true });
+});
 router.post('/api/admin/orders/:id/melhor-envio/comprar', requireAdmin, async (req, res) => { try { res.json(await comprar(Number(req.params.id), (req.body || {}).servico, (req.body || {}).documento, (req.body || {}).nome)); } catch (e) { erro(res, e); } });
 router.post('/api/admin/orders/:id/melhor-envio/concluir', requireAdmin, async (req, res) => {
   try { await concluir(Number(req.params.id)); res.json({ ok: true, ...(await respostaPedido(Number(req.params.id))) }); } catch (e) { erro(res, e); }

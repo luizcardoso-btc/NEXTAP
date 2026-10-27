@@ -450,6 +450,11 @@ CREATE TABLE IF NOT EXISTS sales (
     );
     CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
   `),
+  // v22 — CPF/CNPJ do destinatário (a etiqueta do Melhor Envio exige). Fica no pedido e como padrão do revendedor. Só adiciona.
+  db => db.exec(`
+    ALTER TABLE orders ADD COLUMN ship_doc TEXT;
+    ALTER TABLE resellers ADD COLUMN doc TEXT;
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });
