@@ -58,6 +58,22 @@ router.post('/contas-teste', async (req, res) => {
   res.json({ id: r.id, email: em, criada, placas, painel: base + '/revendedor/' });
 });
 
+// Zerar as placas de teste de uma conta: apaga só as placas SEM pedido (as de teste). Placas de pedidos reais nunca são tocadas.
+router.post('/resellers/:id/zerar-placas-teste', (req, res) => {
+  const rev = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
+  if (!rev) return res.status(404).json({ error: 'Revendedor não encontrado.' });
+  const ids = db.prepare('SELECT id FROM plates WHERE reseller_id = ? AND order_id IS NULL').all(rev.id).map(p => p.id);
+  if (req.body && req.body.somente_contar) return res.json({ ok: true, total: ids.length });
+  db.transaction(() => ids.forEach(id => {
+    db.prepare("UPDATE qr_estoque SET status='livre', plate_id=NULL, usado_em=NULL WHERE plate_id = ?").run(id);
+    db.prepare('DELETE FROM plate_reads WHERE plate_id = ?').run(id);
+    db.prepare('UPDATE sales SET plate_id = NULL WHERE plate_id = ?').run(id);
+    db.prepare('DELETE FROM plates WHERE id = ?').run(id);
+  }))();
+  pedidos.registrarEvento({ origem: 'admin', resultado: 'placas_teste_zeradas', detalhe: `${rev.name}: ${ids.length} placa(s)` });
+  res.json({ ok: true, total: ids.length });
+});
+
 // Serviço "Link de Avaliação do Google": assinantes, faturamento e uso.
 router.get('/google-servico', (req, res) => {
   const gl = require('./google-plano.js');
