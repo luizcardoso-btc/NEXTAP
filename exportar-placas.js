@@ -83,9 +83,13 @@ const arq = n => String(n).replace('#', '');
 // Monta o ZIP do fornecedor (CSV + PDF + SVG por placa). placas: [{numero,url,cor,pedido,data}]
 async function montarZip(placas, { titulo, intro }) {
   const csv = '\uFEFF' + ['numero;cor;pedido;data;link_qr_dinamico'].concat(placas.map(p => [p.numero, p.cor, p.pedido || '', p.data || '', p.url].join(';'))).join('\r\n') + '\r\n';
-  const leia = `NexTap — arquivo para o fornecedor\r\n\r\n${intro}\r\nPlacas: ${placas[0].numero} a ${placas[placas.length - 1].numero} (${placas.length} placas)\r\n- placas.csv: numeração, cor e link de cada placa (abre no Excel)\r\n- placas-qr.pdf: QR Code + número de cada placa, 1 QR por página (vetorial)\r\n- png_2.037cm/: um PNG por placa, 2,037 cm x 2,037 cm (tamanho físico gravado no arquivo), nomeado pelo número (ex.: 00001.png)\r\n- svg/: um QR Code vetorial por placa, nomeado pelo número (ex.: 00001.svg)\r\n\r\nO QR é dinâmico: leva ao link fixo da placa e o destino é trocado no painel, sem regravar nada.\r\nGerado em ${new Date().toISOString().slice(0, 10)}.\r\n`;
-  // Só os PNGs 2,037 x 2,037 cm (é o que o fornecedor recebe).
-  const lista = placas.map(p => ({ nome: `png_2.037cm/${arq(p.numero)}.png`, dados: png(p.url) }));
+  const leia = `NexTap — arquivo para o fornecedor\r\n\r\n${intro}\r\nPlacas: ${placas[0].numero} a ${placas[placas.length - 1].numero} (${placas.length} placas)\r\n\r\n- placas.csv: numeração, cor e link de cada placa (abre no Excel)\r\n- placas-qr.pdf: QR Code + NÚMERO grande de cada placa, 1 por página — use para marcar o número em cada placa\r\n- png_2.037cm/: um PNG por placa, 2,037 cm x 2,037 cm (tamanho físico gravado no arquivo), nomeado pelo número (ex.: 01837.png)\r\n\r\nCada QR leva a um link único da placa. O número do arquivo (ex.: 01837.png) é o número a marcar na placa que recebe aquele QR.\r\nGerado em ${new Date().toISOString().slice(0, 10)}.\r\n`;
+  const lista = [
+    { nome: 'LEIA-ME.txt', dados: Buffer.from(leia, 'utf8') },
+    { nome: 'placas.csv', dados: Buffer.from(csv, 'utf8') },
+    { nome: 'placas-qr.pdf', dados: await pdf(placas, titulo) },
+    ...placas.map(p => ({ nome: `png_2.037cm/${arq(p.numero)}.png`, dados: png(p.url) })),
+  ];
   return zip(lista);
 }
 const baseUrl = req => (process.env.SITE_HOST ? 'https://' + process.env.SITE_HOST.replace(/^https?:\/\//, '') : `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');

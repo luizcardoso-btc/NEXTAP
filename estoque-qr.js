@@ -80,6 +80,15 @@ router.put('/api/admin/qr-estoque/config', (req, res) => {
 router.post('/api/admin/qr-estoque/lotes', (req, res) => {
   try { const id = criarLote({ azul: (req.body || {}).azul, preta: (req.body || {}).preta, origem: 'manual', observacao: (req.body || {}).observacao }); res.json({ id }); } catch (e) { err(res, e); }
 });
+// Zerar o estoque de QR que ainda NÃO foi usado em venda (opcionalmente só uma cor). Os números não voltam: o próximo lote continua da numeração seguinte.
+router.post('/api/admin/qr-estoque/zerar', (req, res) => {
+  const cor = ['azul', 'preta'].includes((req.body || {}).cor) ? req.body.cor : null;
+  const where = "status = 'livre'" + (cor ? ' AND cor = ?' : ''), p = cor ? [cor] : [];
+  if ((req.body || {}).somente_contar) return res.json({ ok: true, total: db.prepare(`SELECT COUNT(*) AS n FROM qr_estoque WHERE ${where}`).get(...p).n });
+  const r = db.prepare(`UPDATE qr_estoque SET status = 'descartada', usado_em = datetime('now') WHERE ${where}`).run(...p);
+  require('./pedidos.js').registrarEvento({ origem: 'admin', resultado: 'qr_estoque_zerado', detalhe: `${r.changes} QR livre(s) descartado(s)${cor ? ' (' + cor + ')' : ''}` });
+  res.json({ ok: true, total: r.changes });
+});
 router.post('/api/admin/qr-estoque/lotes/:id/enviado', (req, res) => {
   db.prepare("UPDATE qr_lotes SET enviado_em = COALESCE(enviado_em, datetime('now')) WHERE id = ?").run(req.params.id); res.json({ ok: true });
 });
