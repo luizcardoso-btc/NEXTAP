@@ -462,6 +462,8 @@ CREATE TABLE IF NOT EXISTS sales (
   `),
   // v24 — cortesia: revendedor com gerador de links ilimitado e biosite sem cobrança (ex.: o perfil pessoal do dono). Só adiciona.
   db => db.exec(`ALTER TABLE resellers ADD COLUMN cortesia INTEGER NOT NULL DEFAULT 0;`),
+  // v25 — lotes de QR por modelo de placa (Pix, Instagram, WhatsApp, redes sociais, restaurante…): detalhe guarda {modelo: quantidade}. Só adiciona.
+  db => db.exec(`ALTER TABLE qr_lotes ADD COLUMN detalhe TEXT;`),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

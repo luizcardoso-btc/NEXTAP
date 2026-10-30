@@ -23,18 +23,36 @@ function proximoNumero() {
 function codigoUnico() { for (;;) { const c = nanoid(10); if (!db.prepare('SELECT 1 FROM plates WHERE code = ?').get(c) && !db.prepare('SELECT 1 FROM qr_estoque WHERE code = ?').get(c)) return c; } }
 
 // Cria um lote: numeração contínua, azuis primeiro e depois pretas.
-function criarLote({ azul = 0, preta = 0, origem = 'manual', observacao = '' }) {
+// Modelos de placa que podem ter QR em estoque: Google azul/preta + as placas do catálogo (Pix, Instagram, WhatsApp, redes sociais, restaurante…).
+const modelosCatalogo = () => db.prepare("SELECT nome FROM produtos WHERE categoria LIKE 'Placas%' AND usa_tabela = 1 AND ativo = 1 AND NOT (nome LIKE '%google%' AND nome LIKE '%azul%') ORDER BY ordem, id").all().map(x => x.nome);
+function criarLote({ azul = 0, preta = 0, outros = {}, origem = 'manual', observacao = '' }) {
   azul = Math.max(0, Math.min(1000, parseInt(azul, 10) || 0)); preta = Math.max(0, Math.min(1000, parseInt(preta, 10) || 0));
-  if (azul + preta < 1) throw Object.assign(new Error('Informe a quantidade de placas do lote.'), { status: 400 });
+  const validos = new Set(modelosCatalogo()), extras = [];
+  for (const [nome, q] of Object.entries(outros || {})) {
+    const n = Math.max(0, Math.min(1000, parseInt(q, 10) || 0)); if (!n) continue;
+    if (!validos.has(nome)) throw Object.assign(new Error(`Modelo "${nome}" não existe no catálogo de placas (ou está inativo).`), { status: 400 });
+    extras.push([nome, n]);
+  }
+  const total = azul + preta + extras.reduce((s, x) => s + x[1], 0);
+  if (total < 1) throw Object.assign(new Error('Informe a quantidade de placas do lote.'), { status: 400 });
+  if (total > 3000) throw Object.assign(new Error('No máximo 3000 QR por lote.'), { status: 400 });
   return db.transaction(() => {
-    const id = Number(db.prepare('INSERT INTO qr_lotes (qtd_azul, qtd_preta, origem, observacao) VALUES (?, ?, ?, ?)').run(azul, preta, origem, String(observacao || '').slice(0, 120)).lastInsertRowid);
+    const id = Number(db.prepare('INSERT INTO qr_lotes (qtd_azul, qtd_preta, origem, observacao, detalhe) VALUES (?, ?, ?, ?, ?)').run(azul, preta, origem, String(observacao || '').slice(0, 120), extras.length ? JSON.stringify(Object.fromEntries(extras)) : null).lastInsertRowid);
     const ins = db.prepare('INSERT INTO qr_estoque (numero, code, cor, lote_id) VALUES (?, ?, ?, ?)');
     let n = proximoNumero();
     for (let i = 0; i < azul; i++) ins.run(fmt(n++), codigoUnico(), 'azul', id);
     for (let i = 0; i < preta; i++) ins.run(fmt(n++), codigoUnico(), 'preta', id);
+    for (const [nome, q] of extras) for (let i = 0; i < q; i++) ins.run(fmt(n++), codigoUnico(), nome, id);
     return id;
   })();
 }
+// Estoque por modelo: livres e usados (inclui modelos antigos que ainda têm QR mesmo se o produto foi renomeado).
+function modelos() {
+  const cont = db.prepare("SELECT cor, SUM(status='livre') AS livres, SUM(status='usada') AS usadas FROM qr_estoque GROUP BY cor").all(), por = Object.fromEntries(cont.map(x => [x.cor, x]));
+  const nomes = ['azul', 'preta', ...modelosCatalogo()]; cont.forEach(x => { if (!nomes.includes(x.cor)) nomes.push(x.cor); });
+  return nomes.map(n => ({ modelo: n, rotulo: n === 'azul' ? 'Google — azul' : n === 'preta' ? 'Google — preta' : n, livres: (por[n] && por[n].livres) || 0, usadas: (por[n] && por[n].usadas) || 0 }));
+}
+const descLote = l => { const d = l.detalhe ? JSON.parse(l.detalhe) : {}; return [l.qtd_azul && `${l.qtd_azul} azuis`, l.qtd_preta && `${l.qtd_preta} pretas`, ...Object.entries(d).map(([k, v]) => `${v} ${k}`)].filter(Boolean).join(' · '); };
 
 // Usado pela venda: devolve o próximo QR livre da cor (ou null) e já o marca como usado.
 function pegar(cor) {
@@ -68,7 +86,8 @@ router.get('/api/admin/qr-estoque', (req, res) => {
       (SELECT MIN(numero) FROM qr_estoque e WHERE e.lote_id = l.id) AS de, (SELECT MAX(numero) FROM qr_estoque e WHERE e.lote_id = l.id) AS ate FROM qr_lotes l ORDER BY l.id DESC LIMIT 60`).all();
   const usadas = db.prepare(`SELECT e.numero, e.cor, e.usado_em, p.order_id, r.name AS revendedor FROM qr_estoque e LEFT JOIN plates p ON p.id = e.plate_id LEFT JOIN resellers r ON r.id = p.reseller_id
       WHERE e.status = 'usada' ORDER BY e.id DESC LIMIT 60`).all();
-  res.json({ config: cfg(), resumo: resumo(), lotes, usadas, proximo_numero: fmt(proximoNumero()) });
+  lotes.forEach(l => { l.descricao = descLote(l); });
+  res.json({ config: cfg(), resumo: resumo(), modelos: modelos(), lotes, usadas, proximo_numero: fmt(proximoNumero()) });
 });
 router.put('/api/admin/qr-estoque/config', (req, res) => {
   const b = req.body || {}, set = (k, v) => db.prepare('INSERT INTO settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor').run(k, String(v));
@@ -78,7 +97,7 @@ router.put('/api/admin/qr-estoque/config', (req, res) => {
   res.json({ config: cfg() });
 });
 router.post('/api/admin/qr-estoque/lotes', (req, res) => {
-  try { const id = criarLote({ azul: (req.body || {}).azul, preta: (req.body || {}).preta, origem: 'manual', observacao: (req.body || {}).observacao }); res.json({ id }); } catch (e) { err(res, e); }
+  try { const id = criarLote({ azul: (req.body || {}).azul, preta: (req.body || {}).preta, outros: (req.body || {}).outros, origem: 'manual', observacao: (req.body || {}).observacao }); res.json({ id }); } catch (e) { err(res, e); }
 });
 // Conferência (só leitura): os QR "livres" já viraram placa, foram configurados ou colidem com alguma placa?
 router.get('/api/admin/qr-estoque/conferir', (req, res) => {
@@ -89,7 +108,7 @@ router.get('/api/admin/qr-estoque/conferir', (req, res) => {
   const numeroEmPlaca = um("SELECT e.numero, p.id AS placa, p.client_name, p.destination_url FROM qr_estoque e JOIN plates p ON p.tracking_code = e.numero WHERE e.status = 'livre'");
   const configuradas = [...codeEmPlaca, ...numeroEmPlaca].filter(x => x.destination_url || x.client_name).map(x => x.numero);
   const lotes = um(`SELECT l.id, l.criado_em, l.baixado_em, l.enviado_em, COUNT(e.id) AS livres, MIN(e.numero) AS de, MAX(e.numero) AS ate,
-      SUM(e.cor='azul') AS azuis, SUM(e.cor='preta') AS pretas FROM qr_lotes l JOIN qr_estoque e ON e.lote_id = l.id AND e.status = 'livre' GROUP BY l.id ORDER BY l.id`);
+      SUM(e.cor='azul') AS azuis, SUM(e.cor='preta') AS pretas, SUM(e.cor NOT IN ('azul','preta')) AS outras FROM qr_lotes l JOIN qr_estoque e ON e.lote_id = l.id AND e.status = 'livre' GROUP BY l.id ORDER BY l.id`);
   const usadasSemPlaca = um("SELECT COUNT(*) AS n FROM qr_estoque WHERE status = 'usada' AND plate_id IS NULL")[0].n;
   const leituras = um("SELECT COUNT(*) AS n FROM plate_reads r JOIN plates p ON p.id = r.plate_id JOIN qr_estoque e ON e.code = p.code WHERE e.status = 'livre'")[0].n;
   const problemas = [];
@@ -97,12 +116,12 @@ router.get('/api/admin/qr-estoque/conferir', (req, res) => {
   if (codeEmPlaca.length) problemas.push(`${codeEmPlaca.length} QR livre(s) com o MESMO código de uma placa existente: ${codeEmPlaca.slice(0, 15).map(x => x.numero).join(', ')}`);
   if (numeroEmPlaca.length) problemas.push(`${numeroEmPlaca.length} QR livre(s) com o MESMO número de uma placa existente: ${numeroEmPlaca.slice(0, 15).map(x => x.numero).join(', ')}`);
   if (configuradas.length) problemas.push(`${configuradas.length} deles já aparecem em placas configuradas: ${configuradas.slice(0, 15).join(', ')}`);
-  res.json({ ok: !problemas.length, livres: livres.length, azuis: livres.filter(x => x.cor === 'azul').length, pretas: livres.filter(x => x.cor === 'preta').length, lotes, problemas, usadas_sem_placa: usadasSemPlaca, leituras_em_livres: leituras });
+  res.json({ ok: !problemas.length, livres: livres.length, azuis: livres.filter(x => x.cor === 'azul').length, pretas: livres.filter(x => x.cor === 'preta').length, outras: livres.filter(x => x.cor !== 'azul' && x.cor !== 'preta').length, lotes, problemas, usadas_sem_placa: usadasSemPlaca, leituras_em_livres: leituras });
 });
 
 // Zerar o estoque de QR que ainda NÃO foi usado em venda (opcionalmente só uma cor). Os números não voltam: o próximo lote continua da numeração seguinte.
 router.post('/api/admin/qr-estoque/zerar', (req, res) => {
-  const cor = ['azul', 'preta'].includes((req.body || {}).cor) ? req.body.cor : null;
+  const cor = typeof (req.body || {}).cor === 'string' && req.body.cor ? req.body.cor : null;
   const where = "status = 'livre'" + (cor ? ' AND cor = ?' : ''), p = cor ? [cor] : [];
   if ((req.body || {}).somente_contar) return res.json({ ok: true, total: db.prepare(`SELECT COUNT(*) AS n FROM qr_estoque WHERE ${where}`).get(...p).n });
   const r = db.prepare(`UPDATE qr_estoque SET status = 'descartada', usado_em = datetime('now') WHERE ${where}`).run(...p);
@@ -115,9 +134,9 @@ router.post('/api/admin/qr-estoque/lotes/:id/enviado', (req, res) => {
 router.get('/api/admin/qr-estoque/lotes/:id/arquivo', async (req, res) => {
   try {
     const l = db.prepare('SELECT * FROM qr_lotes WHERE id = ?').get(req.params.id); if (!l) return res.status(404).json({ error: 'Lote não encontrado.' });
-    const base = exp.baseUrl(req), rows = db.prepare('SELECT numero, code, cor FROM qr_estoque WHERE lote_id = ? ORDER BY id').all(l.id);
+    const base = exp.baseUrl(req), desc = descLote(l), rows = db.prepare('SELECT numero, code, cor FROM qr_estoque WHERE lote_id = ? ORDER BY id').all(l.id);
     const placas = rows.map(r => ({ numero: r.numero, url: `${base}/r/${r.code}`, cor: r.cor, pedido: '', data: (l.criado_em || '').slice(0, 10) }));
-    const z = await exp.montarZip(placas, { titulo: `NexTap — Lote ${l.id}: QR e numeração de ${placas.length} placas (${l.qtd_azul} azuis, ${l.qtd_preta} pretas)`, intro: `Lote ${l.id} — ${l.qtd_azul} placas azuis e ${l.qtd_preta} placas pretas (a cor de cada número está no CSV).` });
+    const z = await exp.montarZip(placas, { titulo: `NexTap — Lote ${l.id}: QR e numeração de ${placas.length} placas (${desc})`, intro: `Lote ${l.id} — ${desc} (o modelo de cada número está no CSV e no PDF).` });
     db.prepare("UPDATE qr_lotes SET baixado_em = COALESCE(baixado_em, datetime('now')) WHERE id = ?").run(l.id);
     exp.enviarZip(res, z, `nextap-lote-${l.id}-${exp.arq(placas[0].numero)}-a-${exp.arq(placas[placas.length - 1].numero)}.zip`);
   } catch (e) { console.error('[QR-ESTOQUE] falha:', e); err(res, e); }
