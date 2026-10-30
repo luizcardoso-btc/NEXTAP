@@ -76,12 +76,17 @@ router.post('/reset', async (req, res) => {
 router.post('/admin-login', (req, res) => {
   if (senha.limitado('admin:' + req.ip, 10)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' });
   const { email, password } = req.body || {};
+  // Tolerante a espaço/linha nova sobrando e aspas coladas no valor da variável do Railway; e-mail sem diferenciar maiúsculas.
+  const limpa = v => String(v ?? '').trim().replace(/^(["'])(.*)\1$/s, '$2').trim();
   const safeEq = (a, b) => {
     const A = Buffer.from(String(a ?? '')), B = Buffer.from(String(b ?? ''));
     return A.length === B.length && crypto.timingSafeEqual(A, B);
   };
-  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD
-      || !safeEq(email, process.env.ADMIN_EMAIL) || !safeEq(password, process.env.ADMIN_PASSWORD)) {
+  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+  const okEmail = safeEq(limpa(email).toLowerCase(), limpa(process.env.ADMIN_EMAIL).toLowerCase());
+  const okSenha = safeEq(limpa(password), limpa(process.env.ADMIN_PASSWORD));
+  if (!okEmail || !okSenha) {
+    console.warn(`[ADMIN] login recusado: ${okEmail ? 'e-mail confere' : 'e-mail NÃO confere'}, ${okSenha ? 'senha confere' : 'senha NÃO confere'}.`);
     return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
   }
   const token = sign({ type: 'admin' });
