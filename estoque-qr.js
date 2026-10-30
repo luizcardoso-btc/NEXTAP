@@ -80,6 +80,26 @@ router.put('/api/admin/qr-estoque/config', (req, res) => {
 router.post('/api/admin/qr-estoque/lotes', (req, res) => {
   try { const id = criarLote({ azul: (req.body || {}).azul, preta: (req.body || {}).preta, origem: 'manual', observacao: (req.body || {}).observacao }); res.json({ id }); } catch (e) { err(res, e); }
 });
+// Conferência (só leitura): os QR "livres" já viraram placa, foram configurados ou colidem com alguma placa?
+router.get('/api/admin/qr-estoque/conferir', (req, res) => {
+  const um = (s, ...p) => db.prepare(s).all(...p);
+  const livres = um("SELECT e.id, e.numero, e.code, e.cor, e.lote_id, e.plate_id FROM qr_estoque e WHERE e.status = 'livre' ORDER BY e.id");
+  const comPlaca = livres.filter(x => x.plate_id).map(x => x.numero);
+  const codeEmPlaca = um("SELECT e.numero, p.tracking_code, p.client_name, p.destination_url FROM qr_estoque e JOIN plates p ON p.code = e.code WHERE e.status = 'livre'");
+  const numeroEmPlaca = um("SELECT e.numero, p.id AS placa, p.client_name, p.destination_url FROM qr_estoque e JOIN plates p ON p.tracking_code = e.numero WHERE e.status = 'livre'");
+  const configuradas = [...codeEmPlaca, ...numeroEmPlaca].filter(x => x.destination_url || x.client_name).map(x => x.numero);
+  const lotes = um(`SELECT l.id, l.criado_em, l.baixado_em, l.enviado_em, COUNT(e.id) AS livres, MIN(e.numero) AS de, MAX(e.numero) AS ate,
+      SUM(e.cor='azul') AS azuis, SUM(e.cor='preta') AS pretas FROM qr_lotes l JOIN qr_estoque e ON e.lote_id = l.id AND e.status = 'livre' GROUP BY l.id ORDER BY l.id`);
+  const usadasSemPlaca = um("SELECT COUNT(*) AS n FROM qr_estoque WHERE status = 'usada' AND plate_id IS NULL")[0].n;
+  const leituras = um("SELECT COUNT(*) AS n FROM plate_reads r JOIN plates p ON p.id = r.plate_id JOIN qr_estoque e ON e.code = p.code WHERE e.status = 'livre'")[0].n;
+  const problemas = [];
+  if (comPlaca.length) problemas.push(`${comPlaca.length} QR marcado(s) como livre mas ligado(s) a uma placa: ${comPlaca.slice(0, 15).join(', ')}`);
+  if (codeEmPlaca.length) problemas.push(`${codeEmPlaca.length} QR livre(s) com o MESMO código de uma placa existente: ${codeEmPlaca.slice(0, 15).map(x => x.numero).join(', ')}`);
+  if (numeroEmPlaca.length) problemas.push(`${numeroEmPlaca.length} QR livre(s) com o MESMO número de uma placa existente: ${numeroEmPlaca.slice(0, 15).map(x => x.numero).join(', ')}`);
+  if (configuradas.length) problemas.push(`${configuradas.length} deles já aparecem em placas configuradas: ${configuradas.slice(0, 15).join(', ')}`);
+  res.json({ ok: !problemas.length, livres: livres.length, azuis: livres.filter(x => x.cor === 'azul').length, pretas: livres.filter(x => x.cor === 'preta').length, lotes, problemas, usadas_sem_placa: usadasSemPlaca, leituras_em_livres: leituras });
+});
+
 // Zerar o estoque de QR que ainda NÃO foi usado em venda (opcionalmente só uma cor). Os números não voltam: o próximo lote continua da numeração seguinte.
 router.post('/api/admin/qr-estoque/zerar', (req, res) => {
   const cor = ['azul', 'preta'].includes((req.body || {}).cor) ? req.body.cor : null;
