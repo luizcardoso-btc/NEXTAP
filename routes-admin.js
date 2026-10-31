@@ -58,6 +58,16 @@ router.post('/contas-teste', async (req, res) => {
   res.json({ id: r.id, email: em, criada, placas, painel: base + '/revendedor/' });
 });
 
+// Cortesia: gerador de links ilimitado e biosite sem cobrança para este revendedor (ligar/desligar).
+router.post('/resellers/:id/cortesia', (req, res) => {
+  const rev = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
+  if (!rev) return res.status(404).json({ error: 'Revendedor não encontrado.' });
+  const on = (req.body || {}).ativo ? 1 : 0;
+  db.prepare('UPDATE resellers SET cortesia = ? WHERE id = ?').run(on, rev.id);
+  pedidos.registrarEvento({ origem: 'admin', resultado: on ? 'cortesia_ligada' : 'cortesia_desligada', detalhe: rev.name });
+  res.json({ ok: true, cortesia: on });
+});
+
 // Zerar as placas de teste de uma conta: apaga só as placas SEM pedido (as de teste). Placas de pedidos reais nunca são tocadas.
 router.post('/resellers/:id/zerar-placas-teste', (req, res) => {
   const rev = db.prepare('SELECT id, name FROM resellers WHERE id = ?').get(req.params.id);
@@ -77,7 +87,7 @@ router.post('/resellers/:id/zerar-placas-teste', (req, res) => {
 // Serviço "Link de Avaliação do Google": assinantes, faturamento e uso.
 router.get('/google-servico', (req, res) => {
   const gl = require('./google-plano.js');
-  const rs = db.prepare(`SELECT r.id, r.name, r.email, r.gl_plano, r.gl_ate, r.created_at,
+  const rs = db.prepare(`SELECT r.id, r.name, r.email, r.gl_plano, r.gl_ate, r.created_at, r.cortesia,
       (SELECT COUNT(*) FROM gl_links l WHERE l.reseller_id = r.id) AS links,
       (SELECT COALESCE(SUM(valor),0) FROM gl_pagamentos p WHERE p.reseller_id = r.id AND p.status='pago') AS pago,
       (SELECT COUNT(*) FROM gl_pagamentos p WHERE p.reseller_id = r.id AND p.status='pago') AS pagamentos,
@@ -88,7 +98,7 @@ router.get('/google-servico', (req, res) => {
   const q = sql => db.prepare(sql).get();
   const mes = q("SELECT COALESCE(SUM(valor),0) AS s FROM gl_pagamentos WHERE status='pago' AND strftime('%Y-%m',pago_em)=strftime('%Y-%m','now')").s;
   const total = q("SELECT COALESCE(SUM(valor),0) AS s FROM gl_pagamentos WHERE status='pago'").s;
-  const ativos = rs.filter(x => x.vigente);
+  const ativos = rs.filter(x => x.vigente && !x.cortesia);
   const mrr = ativos.reduce((s, x) => s + (gl.PLANOS[x.plano_atual] ? gl.PLANOS[x.plano_atual].preco : 0), 0);
   const vencendo = ativos.filter(x => x.gl_ate && x.gl_ate <= db.prepare("SELECT datetime('now','+7 days') AS d").get().d).length;
   const contas = q('SELECT COUNT(DISTINCT reseller_id) AS n FROM gl_links').n;
@@ -179,7 +189,7 @@ router.post('/resellers', async (req, res) => {
 
 router.get('/resellers', (req, res) => {
   const rows = db.prepare(`
-    SELECT r.id, r.name, r.email, r.whatsapp, r.addr_city, r.addr_state, r.created_at,
+    SELECT r.id, r.name, r.email, r.whatsapp, r.addr_city, r.addr_state, r.created_at, r.cortesia,
       (SELECT COUNT(*) FROM orders o WHERE o.reseller_id=r.id) AS pedidos,
       (SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.a_receber=0 AND o.status IN ('pago','em_producao','enviado','entregue')) AS gasto,
       (SELECT COUNT(*) FROM plates p WHERE p.reseller_id=r.id) AS placas,
