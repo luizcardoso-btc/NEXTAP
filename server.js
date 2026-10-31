@@ -43,8 +43,11 @@ app.use((req, res, next) => {
 app.get('/robots.txt', (req, res) => res.type('text/plain').send(
   'User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /revendedor\nDisallow: /api\n' +
   (SITE_HOST ? `Sitemap: https://${SITE_HOST}/sitemap.xml\n` : '')));
-app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://${SITE_HOST || req.hostname}/</loc></url></urlset>`));
+app.get('/sitemap.xml', (req, res) => {
+  const h = SITE_HOST || req.hostname, hoje = new Date().toISOString().slice(0, 10);
+  const urls = ['/', ...seoPaginas.PATHS].map(p => `<url><loc>https://${h}${p === '/' ? '/' : p}</loc><lastmod>${hoje}</lastmod></url>`).join('');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
+});
 
 // CORS: se FRONTEND_URL estiver definido, aceita só ele (mais seguro); vírgula separa vários domínios.
 const SITE_HOST = (process.env.SITE_HOST || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -64,6 +67,8 @@ app.use('/', require('./catalogo.js')); // catálogo de produtos (LP + checkout 
 app.use('/', require('./declaracao-conteudo.js')); // declaração de conteúdo em PDF (página /admin/declaracao + API)
 app.use('/', require('./exportar-placas.js'));
 app.use('/', require('./estoque-qr.js')); // estoque de QR pré-numerados: /api/admin/qr-estoque // exportação das últimas placas vendidas (ZIP para o fornecedor)
+const seoPaginas = require('./seo-paginas.js');
+app.use('/', seoPaginas); // páginas de entrada para Google/IA: fornecedor, como funciona, revenda + /llms.txt
 app.use('/', require('./cardapio.js')); // cardápio inteligente em vídeo: /c/:slug público + admin
 app.use('/', require('./restaurantes.js')); // restaurantes: cardápio digital O Sacoleiro, comissão recorrente (admin)
 app.use('/', require('./prospeccao.js')); // prospecção de empresas locais (admin)

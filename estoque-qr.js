@@ -24,7 +24,7 @@ function codigoUnico() { for (;;) { const c = nanoid(10); if (!db.prepare('SELEC
 
 // Cria um lote: numeração contínua, azuis primeiro e depois pretas.
 // Modelos de placa que podem ter QR em estoque: Google azul/preta + as placas do catálogo (Pix, Instagram, WhatsApp, redes sociais, restaurante…).
-const modelosCatalogo = () => db.prepare("SELECT nome FROM produtos WHERE categoria LIKE 'Placas%' AND usa_tabela = 1 AND ativo = 1 AND NOT (nome LIKE '%google%' AND nome LIKE '%azul%') ORDER BY ordem, id").all().map(x => x.nome);
+const modelosCatalogo = () => db.prepare("SELECT nome FROM produtos WHERE categoria LIKE 'Placas%' AND usa_tabela = 1 AND (ativo = 1 OR nome IN ('Placa Restaurante — mesa', 'Placa Menu — quadrada')) AND NOT (nome LIKE '%google%' AND nome LIKE '%azul%') ORDER BY ordem, id").all().map(x => x.nome);
 function criarLote({ azul = 0, preta = 0, outros = {}, origem = 'manual', observacao = '' }) {
   azul = Math.max(0, Math.min(1000, parseInt(azul, 10) || 0)); preta = Math.max(0, Math.min(1000, parseInt(preta, 10) || 0));
   const validos = new Set(modelosCatalogo()), extras = [];
