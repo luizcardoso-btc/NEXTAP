@@ -225,15 +225,28 @@ function adicionarDiasUteis(iso, dias) {
 }
 
 const CODIGO_CORREIOS = /^[A-Z]{2}\d{9}[A-Z]{2}$/;
+const CODIGO_OUTRA = /^[A-Z0-9][A-Z0-9-]{4,29}$/; // J&T e outras transportadoras: letras/números, 5 a 30 caracteres
+const SERV_CORREIOS = ['PAC', 'SEDEX', 'PAC MINI', 'MINI ENVIOS'];
+const ehJT = s => /j\s*&?\s*t|jet/i.test(String(s || ''));
+// Correios exige o formato AA123456789BR. Serviço "J&T Express" ou "Outro" (outras transportadoras) aceita o código da transportadora.
 function lerRastreio(b) {
   const codigo = String((b || {}).codigo || '').replace(/\s/g, '').toUpperCase();
-  if (!CODIGO_CORREIOS.test(codigo)) {
-    return { erro: 'Código de rastreio inválido. Os Correios usam 2 letras + 9 números + 2 letras, por exemplo AA123456789BR.' };
-  }
   const servico = String((b || {}).servico || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  const correios = !servico || SERV_CORREIOS.includes(servico.toUpperCase());
+  if (correios ? !CODIGO_CORREIOS.test(codigo) : !CODIGO_OUTRA.test(codigo)) {
+    return { erro: correios
+      ? 'Código de rastreio inválido. Os Correios usam 2 letras + 9 números + 2 letras, por exemplo AA123456789BR. Se o envio foi por outra transportadora (J&T etc.), escolha o serviço "J&T Express" ou "Outro".'
+      : 'Código de rastreio inválido. Use só letras e números (de 5 a 30 caracteres).' };
+  }
   return { codigo, servico };
 }
-const linkRastreio = codigo => `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(codigo)}`;
+// Link de acompanhamento: Correios (formato AA123456789BR) ou J&T; outras transportadoras ficam sem link (só o código).
+const linkRastreio = (codigo, servico) => {
+  if (CODIGO_CORREIOS.test(String(codigo || '')) && (!servico || SERV_CORREIOS.includes(String(servico).toUpperCase()))) return `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(codigo)}`;
+  if (ehJT(servico)) return `https://www.jtexpress.com.br/trajectoryQuery?waybillNo=${encodeURIComponent(codigo)}`;
+  return CODIGO_CORREIOS.test(String(codigo || '')) ? `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(codigo)}` : null;
+};
+const nomeTransp = (servico, codigo) => ehJT(servico) ? 'J&T Express' : (CODIGO_CORREIOS.test(String(codigo || '')) ? 'Correios' : (servico || 'transportadora'));
 
 // Versão para o revendedor: sem os dados internos da etiqueta (rastreio só aparece quando o envio é liberado).
 const INTERNOS = ['me_id', 'me_servico_id', 'me_etiqueta_url', 'me_status', 'me_rastreio', 'me_liberar', 'me_erro', 'me_tent'];
@@ -246,7 +259,7 @@ function decorar(o) {
     x.prazo_envio = adicionarDiasUteis(o.producao_at, PRAZO_PRODUCAO_DIAS);
     x.atrasado = hojeBrasil() > x.prazo_envio;
   }
-  if (o.tracking_code) x.rastreio_url = linkRastreio(o.tracking_code);
+  if (o.tracking_code) { x.rastreio_url = linkRastreio(o.tracking_code, o.shipping_service); x.transportadora = nomeTransp(o.shipping_service, o.tracking_code); }
   return x;
 }
 

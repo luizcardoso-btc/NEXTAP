@@ -422,7 +422,7 @@ function passos(o){
     if(k===0&&atual)info=' <span class="mut">· aguardando</span>';
     if(k===1&&atual)info=' <span class="mut">· produção começa em breve ('+(o.prazo_producao_dias||5)+' dias úteis)</span>';
     if(k===2&&atual&&o.prazo_envio)info=' <span class="mut">· previsão de envio até '+dm(o.prazo_envio)+'</span>';
-    if(k===3&&(atual||feito)&&o.tracking_code)info+='<div style="margin:2px 0 4px 16px"><b style="letter-spacing:.4px">'+E(o.tracking_code)+'</b> <a style="color:var(--pr);font-weight:700" target="_blank" rel="noopener" href="'+E(o.rastreio_url)+'">Rastrear nos Correios</a> <a style="cursor:pointer;color:var(--mut)" onclick="cpRast(\''+E(o.tracking_code)+'\')">copiar</a></div>';
+    if(k===3&&(atual||feito)&&o.tracking_code)info+='<div style="margin:2px 0 4px 16px"><b style="letter-spacing:.4px">'+E(o.tracking_code)+'</b> '+(o.rastreio_url?'<a style="color:var(--pr);font-weight:700" target="_blank" rel="noopener" href="'+E(o.rastreio_url)+'">Rastrear '+E(o.transportadora==='Correios'||!o.transportadora?'nos Correios':'na '+o.transportadora)+'</a>':'<span class="mut">'+E(o.transportadora||'')+'</span>')+' <a style="cursor:pointer;color:var(--mut)" onclick="cpRast(\''+E(o.tracking_code)+'\')">copiar</a></div>';
     return '<small style="color:'+cor+';font-weight:'+(atual?'700':'500')+'">'+(feito?'✔':atual?'●':'○')+' '+n+info+'</small>'}).join('')+'</div>'}
 function vPedidos(){head('Meus pedidos','Acompanhe o pagamento e a entrega das suas placas.');
   var pend=ORDERS.filter(function(o){return o.status==='aguardando_pagamento'});
