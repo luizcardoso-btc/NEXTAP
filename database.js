@@ -479,6 +479,26 @@ CREATE TABLE IF NOT EXISTS sales (
       UNIQUE (restaurante_id, mes)
     );
   `),
+  // v27 — cardápio inteligente (vídeo) por restaurante: cardápio, itens e eventos (visita/pedido). Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS cardapios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, restaurante_id INTEGER NOT NULL UNIQUE REFERENCES restaurantes(id) ON DELETE CASCADE, slug TEXT NOT NULL UNIQUE,
+      titulo TEXT NOT NULL, descricao TEXT NOT NULL DEFAULT '', cor TEXT NOT NULL DEFAULT '#e11d48', tema TEXT NOT NULL DEFAULT 'escuro', logo_url TEXT NOT NULL DEFAULT '',
+      whatsapp TEXT NOT NULL DEFAULT '', instagram TEXT NOT NULL DEFAULT '', ativo INTEGER NOT NULL DEFAULT 1,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS cardapio_itens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cardapio_id INTEGER NOT NULL REFERENCES cardapios(id) ON DELETE CASCADE, categoria TEXT NOT NULL DEFAULT 'Cardápio',
+      nome TEXT NOT NULL, descricao TEXT NOT NULL DEFAULT '', preco REAL NOT NULL DEFAULT 0, foto_url TEXT NOT NULL DEFAULT '', video_url TEXT NOT NULL DEFAULT '',
+      destaque INTEGER NOT NULL DEFAULT 0, ativo INTEGER NOT NULL DEFAULT 1, ordem INTEGER NOT NULL DEFAULT 0, criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cardapio_itens ON cardapio_itens (cardapio_id, ordem);
+    CREATE TABLE IF NOT EXISTS cardapio_eventos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cardapio_id INTEGER NOT NULL REFERENCES cardapios(id) ON DELETE CASCADE, tipo TEXT NOT NULL, mesa TEXT NOT NULL DEFAULT '',
+      valor REAL NOT NULL DEFAULT 0, criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_cardapio_ev ON cardapio_eventos (cardapio_id, tipo, criado_em);
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

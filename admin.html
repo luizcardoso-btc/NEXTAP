@@ -414,7 +414,7 @@ function vRest(){
     return '<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>'+E(x.nome)+'</b><span class="st '+c+'">'+RSTN[x.status]+'</span><span class="mut" style="margin-left:auto">'+R(x.mensalidade)+'/mês · sua parte '+R(x.comissao)+'</span></div>'
      +'<div class="mut" style="font-size:13px;margin-top:4px">'+E([x.contato,x.telefone,x.cidade].filter(Boolean).join(' · ')||'sem contato')+'</div>'
      +'<div style="font-size:13px;margin-top:4px">Placa: '+(x.placa?'<b>'+E(x.placa)+'</b>':'<span class="mut">não ligada</span>')+' · Cardápio: '+(x.link_cardapio?'<a href="'+E(x.link_cardapio)+'" target="_blank" rel="noopener">abrir</a>':'<span class="mut">sem link</span>')+(x.a_receber?' · <b>a receber '+R(x.a_receber)+'</b>':'')+'</div>'
-     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn" onclick="restForm('+x.id+')">Editar</button><button class="btn" onclick="restPlaca('+x.id+')">Ligar placa</button><button class="btn" onclick="restCom('+x.id+')">Comissões</button></div></div>'}).join('');
+     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn" onclick="restForm('+x.id+')">Editar</button><button class="btn" onclick="restPlaca('+x.id+')">Ligar placa</button><button class="btn" onclick="restCom('+x.id+')">Comissões</button><button class="btn p" onclick="cardEd('+x.id+')">🎬 Cardápio em vídeo</button></div></div>'}).join('');
   return k+bt+cards}
 function restAch(id){return (RST.lista.filter(function(x){return x.id===id})[0])||{}}
 function restForm(id){var x=id?restAch(id):{};RV=id||0;
@@ -441,6 +441,40 @@ async function restRec(cid,ok){try{await api('/admin/restaurantes/comissoes/'+ci
 async function restGerar(){try{var r=await api('/admin/restaurantes/comissoes/gerar',{method:'POST',body:'{}'});await loadRest();toast(r.criadas+' comissão(ões) criada(s) em '+r.mes)}catch(e){alert(e.message)}}
 function restCfg(){mo('<h3 style="margin:0">Valores padrão</h3><p class="mut" style="margin:6px 0">Usados em novos restaurantes.</p><label>Mensalidade do cardápio (R$)<input id="cf1" value="'+RST.config.mensalidade+'"></label><label>Sua comissão por mês (R$)<input id="cf2" value="'+RST.config.comissao+'"></label><div style="margin-top:12px;display:flex;gap:8px"><button class="btn p" onclick="restCfgOk()">Salvar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
 async function restCfgOk(){try{await api('/admin/restaurantes/config',{method:'PUT',body:JSON.stringify({mensalidade:$('cf1').value,comissao:$('cf2').value})});cl();await loadRest();toast('Salvo ✓')}catch(e){alert(e.message)}}
+
+
+/* ===== Cardápio inteligente (vídeo) ===== */
+var CD=null,CDR=0;
+async function cardEd(rid){CDR=rid;try{CD=await api('/admin/restaurantes/'+rid+'/cardapio');cardDraw()}catch(e){alert(e.message)}}
+function cardDraw(){var c=CD.cardapio,x=restAch(CDR),g='display:grid;grid-template-columns:1fr 1fr;gap:10px';
+  var f=function(i,l,v,a){return '<label>'+l+'<input id="'+i+'" value="'+E(v==null?'':v)+'" '+(a||'')+'></label>'};
+  var h='<h3 style="margin:0">🎬 Cardápio em vídeo — '+E(x.nome)+'</h3>';
+  var v=c||{titulo:x.nome,slug:CD.sugestao_slug,cor:'#e11d48',tema:'escuro',whatsapp:x.telefone||''};
+  h+='<div style="'+g+';margin-top:8px">'+f('cn','Nome no cardápio',v.titulo)+f('cs','Endereço (nextapbrasil.com.br/c/…)',v.slug)+'</div>'
+   +'<label>Frase curta<input id="cd" value="'+E(v.descricao||'')+'" maxlength="200" placeholder="Ex.: Massas artesanais feitas na hora"></label>'
+   +'<div style="'+g+'">'+f('cw','WhatsApp para receber pedidos',v.whatsapp,'inputmode="tel" placeholder="75 99999-0000"')+f('cg','Instagram (sem @)',v.instagram)+'</div>'
+   +'<div style="'+g+'">'+f('cl','Link da logo (https://…)',v.logo_url)+'<label>Cor e visual<span style="display:flex;gap:8px"><input id="cc" type="color" value="'+E(v.cor||'#e11d48')+'" style="width:60px;padding:2px"><select id="ct"><option value="escuro"'+(v.tema!=='claro'?' selected':'')+'>Escuro</option><option value="claro"'+(v.tema==='claro'?' selected':'')+'>Claro</option></select></span></label></div>'
+   +'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn p" onclick="cardSalvar()">'+(c?'Salvar':'Criar cardápio')+'</button>'+(c?'<a class="btn" target="_blank" rel="noopener" href="'+E(c.url)+'">Abrir cardápio</a><button class="btn" onclick="cardCopiar()">Copiar link</button>':'')+'<button class="btn" style="margin-left:auto" onclick="cl()">Fechar</button></div>';
+  if(c){var st=CD.stats;h+='<div class="mut" style="margin:10px 0;font-size:13px">Últimos 30 dias: <b>'+st.visitas_30d+'</b> aberturas · <b>'+st.pedidos_30d+'</b> pedidos enviados ('+R(st.valor_pedidos_30d)+') · Link: '+E(c.url)+'</div>'
+   +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><b>Pratos ('+CD.itens.length+')</b><button class="btn p" onclick="itemEd(0)">+ Prato</button></div>'
+   +(CD.itens.length?CD.itens.map(function(i){return '<div class="card" style="margin:8px 0;padding:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap'+(i.ativo?'':';opacity:.5')+'"><div style="flex:1;min-width:140px"><b>'+E(i.nome)+'</b>'+(i.destaque?' ★':'')+'<div class="mut" style="font-size:12px">'+E(i.categoria)+' · '+R(i.preco)+' · '+(i.video_url?'🎬 vídeo':'sem vídeo')+(i.foto_url?' · 🖼 foto':'')+'</div></div><button class="btn" onclick="itemEd('+i.id+')">Editar</button></div>'}).join(''):'<p class="mut">Nenhum prato ainda. Cole o link do vídeo de cada prato (YouTube, Vimeo ou .mp4).</p>')}
+  mo(h)}
+async function cardSalvar(){var b={titulo:$('cn').value,slug:$('cs').value,descricao:$('cd').value,whatsapp:$('cw').value,instagram:$('cg').value,logo_url:$('cl').value,cor:$('cc').value,tema:$('ct').value};
+  try{await api('/admin/restaurantes/'+CDR+'/cardapio',{method:'PUT',body:JSON.stringify(b)});await loadRest();CD=await api('/admin/restaurantes/'+CDR+'/cardapio');cardDraw();toast('Cardápio salvo ✓')}catch(e){alert(e.message)}}
+function cardCopiar(){try{navigator.clipboard.writeText(CD.cardapio.url);toast('Link copiado ✓')}catch(e){prompt('Copie o link:',CD.cardapio.url)}}
+var IT=null;
+function itemEd(id){IT=id?CD.itens.filter(function(i){return i.id===id})[0]:{};IT=IT||{};var i=IT,g='display:grid;grid-template-columns:1fr 1fr;gap:10px';
+  var f=function(k,l,v,a){return '<label>'+l+'<input id="'+k+'" value="'+E(v==null?'':v)+'" '+(a||'')+'></label>'};
+  var cats=[];CD.itens.forEach(function(x){if(cats.indexOf(x.categoria)<0)cats.push(x.categoria)});
+  mo('<h3 style="margin:0">'+(i.id?'Editar prato':'Novo prato')+'</h3>'+f('in','Nome do prato',i.nome)
+   +'<label>Descrição<textarea id="id" rows="2" maxlength="220">'+E(i.descricao||'')+'</textarea></label>'
+   +'<div style="'+g+'"><label>Categoria<input id="ic" list="icl" value="'+E(i.categoria||'')+'" placeholder="Massas, Bebidas…"><datalist id="icl">'+cats.map(function(c){return '<option>'+E(c)+'</option>'}).join('')+'</datalist></label>'+f('ip','Preço (R$)',i.preco!=null?String(i.preco).replace('.',','):'','inputmode="decimal"')+'</div>'
+   +f('iv','Link do vídeo do prato (YouTube, Vimeo ou .mp4)',i.video_url,'inputmode="url" placeholder="https://youtube.com/shorts/…"')+f('if','Link da foto (opcional, serve de capa)',i.foto_url,'inputmode="url"')
+   +'<div style="'+g+'">'+f('io','Ordem (menor aparece primeiro)',i.ordem==null?'':i.ordem,'inputmode="numeric"')+'<label>Opções<span style="display:block;margin-top:6px"><label style="display:inline"><input type="checkbox" id="ids"'+(i.destaque?' checked':'')+'> ★ Destaque</label> &nbsp; <label style="display:inline"><input type="checkbox" id="ia"'+(i.ativo===0?'':' checked')+'> Visível</label></span></label></div>'
+   +'<div style="margin-top:12px;display:flex;gap:8px"><button class="btn p" onclick="itemSalvar()">Salvar</button><button class="btn" onclick="cardDraw()">Voltar</button>'+(i.id?'<button class="btn" style="margin-left:auto;color:#dc2626" onclick="itemApagar('+i.id+')">Apagar</button>':'')+'</div>')}
+async function itemSalvar(){var b={nome:$('in').value,descricao:$('id').value,categoria:$('ic').value,preco:$('ip').value,video_url:$('iv').value,foto_url:$('if').value,destaque:$('ids').checked?1:0,ativo:$('ia').checked?1:0};if($('io').value!=='')b.ordem=$('io').value;
+  try{await api(IT.id?'/admin/cardapio-itens/'+IT.id:'/admin/restaurantes/'+CDR+'/cardapio/itens',{method:IT.id?'PUT':'POST',body:JSON.stringify(b)});CD=await api('/admin/restaurantes/'+CDR+'/cardapio');cardDraw();toast('Prato salvo ✓')}catch(e){alert(e.message)}}
+async function itemApagar(id){if(!confirm('Apagar este prato?'))return;try{await api('/admin/cardapio-itens/'+id,{method:'DELETE'});CD=await api('/admin/restaurantes/'+CDR+'/cardapio');cardDraw()}catch(e){alert(e.message)}}
 
 function vPro(){
   head('Prospecção','Empresas da sua cidade: o que falar, quem já foi abordado e quando voltar.');
