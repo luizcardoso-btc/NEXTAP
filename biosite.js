@@ -100,7 +100,7 @@ const wrap = fn => (req, res) => { try { fn(req, res); } catch (e) { res.status(
 R.get('/', (req, res) => {
   const lista = db.prepare('SELECT * FROM biosites WHERE reseller_id = ? ORDER BY id DESC').all(req.resellerId).map(b => dto(b, req));
   const custo = preco();
-  res.json({ preco: custo, venda_min: 100, venda_max: 200, lista: lista.map(({ foto, links, ...x }) => ({ ...x, tem_foto: !!foto, botoes: links.length })),
+  res.json({ preco: custo, cortesia: !!db.prepare('SELECT cortesia FROM resellers WHERE id = ?').get(req.resellerId)?.cortesia, venda_min: 100, venda_max: 200, lista: lista.map(({ foto, links, ...x }) => ({ ...x, tem_foto: !!foto, botoes: links.length })),
     resumo: { publicados: lista.filter(b => b.status === 'publicado').length, lucro_estimado: lista.filter(b => b.status === 'publicado' && b.preco_venda > 0).reduce((s, b) => s + b.preco_venda - custo, 0) } });
 });
 
