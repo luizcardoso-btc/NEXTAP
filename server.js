@@ -77,7 +77,10 @@ app.use('/', require('./routes-public.js')); // /r/:code — link do QR Code / N
 ['logo.png', 'placa.jpg', 'placas-nextap.jpg', 'favicon.png'].forEach(f =>
   app.get('/' + f, (req, res) => res.sendFile(path.join(__dirname, f), { maxAge: '1d' })));
 const page = f => (req, res) => res.sendFile(path.join(__dirname, f));
-app.get('/', page('site.html'));
+// Página inicial: o endereço oficial (canonical, og:url, dados estruturados) vem do domínio configurado em SITE_HOST.
+const fs = require('fs');
+const siteHtml = fs.readFileSync(path.join(__dirname, 'site.html'), 'utf8');
+app.get('/', (req, res) => res.type('html').send(siteHtml.replace(/%%URL%%/g, 'https://' + (SITE_HOST || req.hostname))));
 app.get(['/revendedor', '/revendedor/'], page('revendedor.html'));
 app.get(['/admin', '/admin/'], page('admin.html'));
 app.get(['/avaliacao', '/avaliacao/'], page('google-link.html'));
