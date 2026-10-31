@@ -464,6 +464,21 @@ CREATE TABLE IF NOT EXISTS sales (
   db => db.exec(`ALTER TABLE resellers ADD COLUMN cortesia INTEGER NOT NULL DEFAULT 0;`),
   // v25 — lotes de QR por modelo de placa (Pix, Instagram, WhatsApp, redes sociais, restaurante…): detalhe guarda {modelo: quantidade}. Só adiciona.
   db => db.exec(`ALTER TABLE qr_lotes ADD COLUMN detalhe TEXT;`),
+  // v26 — restaurantes (cardápio digital O Sacoleiro): funil, mensalidade, comissão recorrente e link do cardápio. Só adiciona.
+  db => db.exec(`
+    CREATE TABLE IF NOT EXISTS restaurantes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, contato TEXT NOT NULL DEFAULT '', telefone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+      documento TEXT NOT NULL DEFAULT '', cidade TEXT NOT NULL DEFAULT '', uf TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'lead',
+      reseller_id INTEGER, plate_id INTEGER, link_cardapio TEXT NOT NULL DEFAULT '', sacoleiro_id TEXT NOT NULL DEFAULT '',
+      mensalidade REAL NOT NULL DEFAULT 150, comissao REAL NOT NULL DEFAULT 79, ativo_desde TEXT, cancelado_em TEXT, obs TEXT NOT NULL DEFAULT '',
+      criado_em TEXT NOT NULL DEFAULT (datetime('now')), atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS restaurante_comissoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, restaurante_id INTEGER NOT NULL REFERENCES restaurantes(id) ON DELETE CASCADE, mes TEXT NOT NULL,
+      valor REAL NOT NULL, status TEXT NOT NULL DEFAULT 'a_receber', recebido_em TEXT, criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (restaurante_id, mes)
+    );
+  `),
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

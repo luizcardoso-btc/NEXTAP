@@ -51,6 +51,16 @@ if (!jaSemeou) {
   })();
 }
 
+// Placas de restaurante (mesa e menu quadrada), com cardápio digital. Roda uma vez; se você já cadastrou com o mesmo nome, não duplica.
+if (!db.prepare("SELECT 1 FROM settings WHERE chave = 'catalogo_restaurante_v1'").get()) {
+  const ja = n => db.prepare('SELECT 1 FROM produtos WHERE nome = ?').get(n);
+  const max = db.prepare('SELECT COALESCE(MAX(ordem),0) AS m FROM produtos').get().m;
+  const ins = db.prepare("INSERT INTO produtos (categoria, nome, descricao, cor, custo, pedido_ativo, ordem, usa_tabela) VALUES ('Placas NFC + QR Code', ?, ?, ?, 13.5, 1, ?, 1)");
+  if (!ja('Placa Restaurante — mesa')) ins.run('Placa Restaurante — mesa', 'NFC + QR Code · cardápio digital, fidelidade, Wi-Fi e avaliações', '#16a34a', max + 1);
+  if (!ja('Placa Menu — quadrada')) ins.run('Placa Menu — quadrada', 'NFC + QR Code · "Aproxime para ver o menu"', '#111111', max + 2);
+  db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('catalogo_restaurante_v1', '1')").run();
+}
+
 // Agora todas as placas NFC + QR são pedidas online (checkout do Mercado Pago). Roda uma vez; displays seguem sob consulta.
 if (!db.prepare("SELECT 1 FROM settings WHERE chave = 'catalogo_placas_online'").get()) {
   db.prepare("UPDATE produtos SET pedido_ativo = 1 WHERE categoria LIKE 'Placas%' AND usa_tabela = 1").run();
