@@ -43,7 +43,7 @@ main{padding:24px;min-width:0}.top{display:flex;justify-content:space-between;ga
 
 <div id="app">
 <aside><a class="logo lgc" href="/" aria-label="NexTap"><img src="/logo.png" alt="NexTap" class="lg"></a><small style="margin-top:4px">PAINEL ADMIN · FORNECEDOR</small>
-<small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a><a data-v="gl" onclick="nav('gl')">⭐ Link de Avaliação</a><a data-v="bs" onclick="nav('bs')">🌐 Biosites</a><a data-v="qr" onclick="nav('qr')">📦 QR em estoque</a><a data-v="me" onclick="nav('me')">🚚 Melhor Envio</a><a data-v="orc" onclick="nav('orc')">🧾 Orçamentos</a><a data-v="pro" onclick="nav('pro')">📍 Prospecção</a>
+<small>PAINEL</small><a data-v="dash" onclick="nav('dash')">▦ Visão geral</a><a data-v="revs" onclick="nav('revs')">👥 Revendedores</a><a data-v="pedidos" onclick="nav('pedidos')">📦 Pedidos</a><a data-v="placas" onclick="nav('placas')">▣ Placas emitidas</a><a data-v="gl" onclick="nav('gl')">⭐ Link de Avaliação</a><a data-v="bs" onclick="nav('bs')">🌐 Biosites</a><a data-v="qr" onclick="nav('qr')">📦 QR em estoque</a><a data-v="me" onclick="nav('me')">🚚 Melhor Envio</a><a data-v="orc" onclick="nav('orc')">🧾 Orçamentos</a><a data-v="pro" onclick="nav('pro')">📍 Prospecção</a><a data-v="rest" onclick="nav('rest')">🍽 Restaurantes</a>
 <small>DOCUMENTOS</small><a data-v="decl" onclick="nav('decl')" style="background:#15803d;color:#fff;font-weight:700">🧾 Declaração e NF-e</a><a href="/admin/catalogo" style="font-weight:700">🛍 Catálogo de produtos</a>
 <small>GESTÃO</small><a data-v="fin" onclick="nav('fin')">💰 Financeiro</a><a data-v="forn" onclick="nav('forn')">🏭 Fornecedores</a><a data-v="cfg" onclick="nav('cfg')">⚙ Preços</a><a data-v="dados" onclick="nav('dados')">🛡 Dados e backups</a>
 <div class="me"><div class="av">A</div><div><b>Admin</b><div class="mut" style="color:#7d8c86">Fornecedor</div></div><button class="btn s" style="margin-left:auto" onclick="out()" title="Sair">⎋</button></div></aside>
@@ -87,11 +87,11 @@ OVER=r[0];REVS=r[1];ORDERS=r[2];PLATES=r[3];TIERS=r[4]}
 function inP(x){var d=U(x.created_at),n=new Date();if(per==='all')return 1;if(per==='today')return d.toDateString()===n.toDateString();if(per==='month')return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();return (n-d)/864e5<=+per}
 function pills(){return '<div class="row">'+[['today','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias'],['month','Este mês'],['all','Tudo']].map(function(p){return '<button class="pill '+(per===p[0]?'on':'')+'" onclick="per=\''+p[0]+'\';draw()">'+p[1]+'</button>'}).join('')+'</div>'}
 function head(t,s){$('hd').innerHTML='<h2>'+t+'</h2><span class="mut">'+s+'</span>'}
-function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='gl')loadGl();if(v==='bs')loadBs();if(v==='qr')loadQr();if(v==='me')loadMe();if(v==='orc'){OV=null;loadOrc()}if(v==='pro')loadPro();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
+function nav(v){cur=v;if(v==='decl'&&typeof loadDecl==='function')loadDecl();if(v==='cfg'&&FRETE===null)loadFrete();if(v==='dados')loadSis();if(v==='gl')loadGl();if(v==='bs')loadBs();if(v==='qr')loadQr();if(v==='me')loadMe();if(v==='orc'){OV=null;loadOrc()}if(v==='pro')loadPro();if(v==='rest')loadRest();if(v==='forn')loadForn();if(v==='fin'){if(FT==='lucro')loadLuc();else if(FT==='desp')loadDesp();else if(FT==='cus')loadCus()}document.querySelectorAll('aside a[data-v]').forEach(function(a){a.classList.toggle('on',a.dataset.v===v)});draw()}
 function mo(h){$('mb').innerHTML=h;$('mo').style.display='grid'}function cl(){$('mo').style.display='none'}
 $('mo').onclick=function(e){if(e.target===this)cl()};
 function draw(){var aviso=(OVER&&OVER.persistente===false)?'<div class="card" style="border-color:#dc2626;margin-bottom:12px"><b style="color:#dc2626">⚠ Atenção: os dados não estão sendo guardados de forma permanente.</b><br><span class="mut">No Railway, crie um Volume (montado em /data) e conecte ao serviço. Até lá, cadastros e pedidos são apagados a cada atualização do sistema.</span></div>':'';
-$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,gl:vGl,bs:vBs,qr:vQr,me:vMe,orc:vOrc,pro:vPro,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
+$('v').innerHTML=aviso+({dash:vDash,revs:vRevs,pedidos:vPedidos,placas:vPlacas,fin:vFin,forn:vForn,cfg:vCfg,dados:vDados,gl:vGl,bs:vBs,qr:vQr,me:vMe,orc:vOrc,pro:vPro,rest:vRest,decl:(typeof vDecl==='function'?vDecl:function(){return ''})})[cur]()}
 async function baixarBackup(){
   try{
     var r=await fetch(API_BASE+'/admin/backup',{headers:{Authorization:'Bearer '+TOKEN}});
@@ -396,6 +396,52 @@ function pVend(){try{return localStorage.getItem('pro_vend')||'Luiz'}catch(e){re
 function pPreco(){var v=null;try{v=localStorage.getItem('pro_preco')}catch(e){}return v||(oPreco(1)||0).toFixed(2).replace('.',',')}
 function pFill(t,p){return t.replace(/\{empresa\}/g,p&&p.nome?p.nome:'sua empresa').replace(/\{contato\}/g,p&&p.contato?p.contato.split(' ')[0]:'').replace(/\{vendedor\}/g,pVend()).replace(/\{preco\}/g,pPreco()).replace(/[ \t]+([!,.?])/g,'$1').replace(/[ \t]{2,}/g,' ')}
 function pTag(s){var c={novo:'pendente',abordado:'pendente',interessado:'pendente',orcamento:'pendente',fechado:'entregue',perdido:'cancelado'}[s]||'pendente';return '<span class="st '+c+'">'+PST[s]+'</span>'}
+
+/* ===== Restaurantes (cardápio digital O Sacoleiro) ===== */
+var RST=null,RV=null;
+var RSTN={lead:'Lead',cadastrando:'Cadastrando',ativo:'Ativo',cancelado:'Cancelado'};
+async function loadRest(){try{RST=await api('/admin/restaurantes')}catch(e){RST={erro:e.message}}if(cur==='rest')draw()}
+function vRest(){
+  head('Restaurantes','Cardápio digital O Sacoleiro: restaurantes, placa da mesa e sua comissão mensal.');
+  if(!RST)return '<div class="card mut">Carregando…</div>';if(RST.erro)return '<div class="card">'+E(RST.erro)+'</div>';
+  var r=RST.resumo,L=RST.lista;
+  var kp=function(t,v,s){return '<div class="card" style="margin:0;padding:12px"><div class="mut" style="font-size:12px">'+t+'</div><b style="font-size:22px">'+v+'</b>'+(s?'<div class="mut" style="font-size:12px">'+s+'</div>':'')+'</div>'};
+  var k='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px">'+kp('Restaurantes ativos',r.ativos,r.leads+' em andamento')+kp('Sua comissão por mês',R(r.mrr),'recorrente')+kp('A receber',R(r.a_receber))+kp('Recebido no mês',R(r.recebido_mes),'total '+R(r.recebido_total))+'</div>';
+  var bt='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn p" onclick="restForm()">+ Novo restaurante</button><button class="btn" onclick="restGerar()">Gerar comissões de '+r.mes+'</button><button class="btn" onclick="restCfg()">⚙ Valores padrão</button></div>';
+  if(!L.length)return k+bt+'<div class="card mut">Nenhum restaurante ainda. Cadastre o primeiro lead e acompanhe até virar ativo.</div>';
+  var cards=L.map(function(x){
+    var c={lead:'pendente',cadastrando:'pendente',ativo:'entregue',cancelado:'cancelado'}[x.status];
+    return '<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>'+E(x.nome)+'</b><span class="st '+c+'">'+RSTN[x.status]+'</span><span class="mut" style="margin-left:auto">'+R(x.mensalidade)+'/mês · sua parte '+R(x.comissao)+'</span></div>'
+     +'<div class="mut" style="font-size:13px;margin-top:4px">'+E([x.contato,x.telefone,x.cidade].filter(Boolean).join(' · ')||'sem contato')+'</div>'
+     +'<div style="font-size:13px;margin-top:4px">Placa: '+(x.placa?'<b>'+E(x.placa)+'</b>':'<span class="mut">não ligada</span>')+' · Cardápio: '+(x.link_cardapio?'<a href="'+E(x.link_cardapio)+'" target="_blank" rel="noopener">abrir</a>':'<span class="mut">sem link</span>')+(x.a_receber?' · <b>a receber '+R(x.a_receber)+'</b>':'')+'</div>'
+     +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn" onclick="restForm('+x.id+')">Editar</button><button class="btn" onclick="restPlaca('+x.id+')">Ligar placa</button><button class="btn" onclick="restCom('+x.id+')">Comissões</button></div></div>'}).join('');
+  return k+bt+cards}
+function restAch(id){return (RST.lista.filter(function(x){return x.id===id})[0])||{}}
+function restForm(id){var x=id?restAch(id):{};RV=id||0;
+  var f=function(i,l,v,a){return '<label>'+l+'<input id="'+i+'" value="'+E(v==null?'':v)+'" '+(a||'')+'></label>'},g='display:grid;grid-template-columns:1fr 1fr;gap:10px';
+  mo('<h3 style="margin:0">'+(id?'Editar restaurante':'Novo restaurante')+'</h3>'+f('rn','Nome do restaurante',x.nome)
+   +'<div style="'+g+'">'+f('rc','Responsável',x.contato)+f('rt','WhatsApp',x.telefone,'inputmode="tel"')+'</div>'
+   +'<div style="'+g+'">'+f('re','E-mail',x.email)+f('rd','CNPJ/CPF',x.documento)+'</div>'
+   +'<div style="'+g+'">'+f('ri','Cidade',x.cidade)+f('ru','UF',x.uf,'maxlength="2"')+'</div>'
+   +'<div style="'+g+'"><label>Situação<select id="rs">'+Object.keys(RSTN).map(function(k){return '<option value="'+k+'"'+((x.status||'lead')===k?' selected':'')+'>'+RSTN[k]+'</option>'}).join('')+'</select></label>'+f('rx','ID no Sacoleiro (opcional)',x.sacoleiro_id)+'</div>'
+   +f('rl','Link do cardápio (https://…)',x.link_cardapio,'inputmode="url"')
+   +'<div style="'+g+'">'+f('rm','Mensalidade do cliente (R$)',x.mensalidade==null?RST.config.mensalidade:x.mensalidade)+f('rq','Sua comissão (R$/mês)',x.comissao==null?RST.config.comissao:x.comissao)+'</div>'
+   +'<label>Observações<textarea id="ro" rows="3">'+E(x.obs||'')+'</textarea></label>'
+   +'<div style="margin-top:12px;display:flex;gap:8px"><button class="btn p" onclick="restSalvar()">Salvar</button><button class="btn" onclick="cl()">Cancelar</button>'+(id?'<button class="btn" style="margin-left:auto;color:#dc2626" onclick="restApagar('+id+')">Apagar</button>':'')+'</div>')}
+async function restSalvar(){var b={nome:$('rn').value,contato:$('rc').value,telefone:$('rt').value,email:$('re').value,documento:$('rd').value,cidade:$('ri').value,uf:$('ru').value,status:$('rs').value,sacoleiro_id:$('rx').value,link_cardapio:$('rl').value,mensalidade:$('rm').value,comissao:$('rq').value,obs:$('ro').value};
+  try{await api(RV?'/admin/restaurantes/'+RV:'/admin/restaurantes',{method:RV?'PUT':'POST',body:JSON.stringify(b)});cl();await loadRest();toast('Salvo ✓')}catch(e){alert(e.message)}}
+async function restApagar(id){if(!confirm('Apagar este restaurante e as comissões dele? A placa não é apagada.'))return;try{await api('/admin/restaurantes/'+id,{method:'DELETE'});cl();await loadRest()}catch(e){alert(e.message)}}
+function restPlaca(id){var x=restAch(id);RV=id;
+  mo('<h3 style="margin:0">Ligar placa — '+E(x.nome)+'</h3><p class="mut" style="margin:6px 0">A placa passa a abrir o cardápio do restaurante.'+(x.link_cardapio?'':' <b style="color:#dc2626">Preencha antes o link do cardápio.</b>')+'</p><label>Código da placa<input id="rpc" value="'+E(x.placa||'')+'" placeholder="#00658"></label><div style="margin-top:12px;display:flex;gap:8px"><button class="btn p" onclick="restPlacaOk()">Ligar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
+async function restPlacaOk(){try{var r=await api('/admin/restaurantes/'+RV+'/ligar-placa',{method:'POST',body:JSON.stringify({codigo:$('rpc').value})});cl();await loadRest();toast('Placa '+r.placa+' ligada ✓')}catch(e){alert(e.message)}}
+async function restCom(id){var x=restAch(id);RV=id;
+  try{var L=await api('/admin/restaurantes/'+id+'/comissoes');
+  mo('<h3 style="margin:0">Comissões — '+E(x.nome)+'</h3>'+(L.length?'<table style="width:100%;margin-top:8px">'+L.map(function(c){return '<tr><td>'+c.mes+'</td><td>'+R(c.valor)+'</td><td>'+(c.status==='recebido'?'<span class="st entregue">Recebido</span></td><td><button class="btn" onclick="restRec('+c.id+',0)">Desfazer</button>':'<span class="st pendente">A receber</span></td><td><button class="btn p" onclick="restRec('+c.id+',1)">Marcar recebido</button>')+'</td></tr>'}).join('')+'</table>':'<p class="mut">Nenhuma comissão ainda. Elas são criadas quando o restaurante fica Ativo e no botão “Gerar comissões”.</p>')+'<div style="margin-top:12px"><button class="btn" onclick="cl()">Fechar</button></div>')}catch(e){alert(e.message)}}
+async function restRec(cid,ok){try{await api('/admin/restaurantes/comissoes/'+cid+(ok?'/recebido':'/desfazer'),{method:'POST',body:'{}'});await loadRest();restCom(RV)}catch(e){alert(e.message)}}
+async function restGerar(){try{var r=await api('/admin/restaurantes/comissoes/gerar',{method:'POST',body:'{}'});await loadRest();toast(r.criadas+' comissão(ões) criada(s) em '+r.mes)}catch(e){alert(e.message)}}
+function restCfg(){mo('<h3 style="margin:0">Valores padrão</h3><p class="mut" style="margin:6px 0">Usados em novos restaurantes.</p><label>Mensalidade do cardápio (R$)<input id="cf1" value="'+RST.config.mensalidade+'"></label><label>Sua comissão por mês (R$)<input id="cf2" value="'+RST.config.comissao+'"></label><div style="margin-top:12px;display:flex;gap:8px"><button class="btn p" onclick="restCfgOk()">Salvar</button><button class="btn" onclick="cl()">Cancelar</button></div>')}
+async function restCfgOk(){try{await api('/admin/restaurantes/config',{method:'PUT',body:JSON.stringify({mensalidade:$('cf1').value,comissao:$('cf2').value})});cl();await loadRest();toast('Salvo ✓')}catch(e){alert(e.message)}}
+
 function vPro(){
   head('Prospecção','Empresas da sua cidade: o que falar, quem já foi abordado e quando voltar.');
   var tabs='<div class="chips" style="display:flex;gap:6px;margin-bottom:12px"><button class="btn'+(PTAB==='lista'?' p':'')+'" onclick="PTAB=\'lista\';draw()">📋 Empresas</button><button class="btn'+(PTAB==='script'?' p':'')+'" onclick="PTAB=\'script\';draw()">🗣 Script do vendedor</button></div>';
