@@ -12,6 +12,15 @@ const { requireAdmin } = require('./auth-middleware.js');
 db.exec(`CREATE TABLE IF NOT EXISTS estoque_fisico (modelo TEXT PRIMARY KEY, qtd INTEGER NOT NULL DEFAULT 0, nota TEXT NOT NULL DEFAULT '', atualizado_em TEXT NOT NULL DEFAULT (datetime('now')));
   CREATE TABLE IF NOT EXISTS estoque_fisico_forn (modelo TEXT NOT NULL, fornecedor TEXT NOT NULL, qtd INTEGER NOT NULL DEFAULT 0, atualizado_em TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (modelo, fornecedor));`);
 
+// Desfaz (uma única vez) o ajuste criado pelo botão "Igualar o Financeiro" em 14/11/2026, a pedido do dono: o "em mãos" volta ao que era antes.
+try {
+  if (!db.prepare("SELECT 1 FROM settings WHERE chave = 'reverteu_igualar_fisico'").get()) {
+    const n = db.prepare("DELETE FROM estoque_mov WHERE tipo = 'ajuste' AND observacao LIKE 'Contagem física por modelo:%'").run().changes;
+    db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('reverteu_igualar_fisico', ?)").run(String(n));
+    if (n) console.log(`[QR-ESTOQUE] ajuste "Igualar o Financeiro" desfeito (${n}).`);
+  }
+} catch (e) { console.error('[QR-ESTOQUE] reverter ajuste:', e.message); }
+
 const cfg = () => {
   const g = (k, d) => { const r = db.prepare('SELECT valor FROM settings WHERE chave = ?').get(k); return r ? r.valor : d; };
   return { minimo: Math.max(0, parseInt(g('qr_minimo', '20'), 10) || 0), lote_auto: Math.max(1, Math.min(500, parseInt(g('qr_lote_auto', '50'), 10) || 50)), auto: g('qr_auto', '1') !== '0' };
