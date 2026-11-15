@@ -2,7 +2,7 @@
 // Dois caminhos para criar uma arte:
 //   1) Grátis, pelo ChatGPT: o sistema monta o comando (prompt) pronto; você gera no ChatGPT e envia a imagem aqui.
 //   2) Automático, pela API da OpenAI (OPENAI_API_KEY): botão "Gerar automático", com limite de gasto por mês.
-// Admin: /admin/artes e /api/admin/artes  ·  Automazap (Theo, no Prédio): /api/integracao/artes com X-Automazap-Secret.
+// Admin: /api/admin/artes (a tela fica no Automazap)  ·  Automazap (Theo, no Prédio): /api/integracao/artes com X-Automazap-Secret.
 // Montado ANTES do express.json global (as imagens passam de 1 MB).
 const express = require('express');
 const path = require('path');
@@ -112,7 +112,7 @@ async function gerar({ prompt, destino, titulo, qualidade, tamanho, enviado_por,
   const custo = CUSTO[q][tam === '1024x1024' ? 0 : 1];
   const g = gastoMes(), lim = limiteMes();
   if (lim <= 0) { const e = new Error('A geração paga está desligada (limite US$ 0, custo zero). Use o comando no ChatGPT, que é grátis.'); e.status = 402; throw e; }
-  if (g.v + custo > lim + 1e-9) { const e = new Error(`Limite do mês atingido: US$ ${g.v.toFixed(2)} de US$ ${lim.toFixed(2)}. Aumente em Banco de artes → Limite, ou use o ChatGPT (grátis).`); e.status = 402; throw e; }
+  if (g.v + custo > lim + 1e-9) { const e = new Error(`Limite do mês atingido: US$ ${g.v.toFixed(2)} de US$ ${lim.toFixed(2)}. Aumente o limite na sala do Theo (Prédio do Automazap), ou use o ChatGPT (grátis).`); e.status = 402; throw e; }
   const p = String(prompt || '').trim();
   if (p.length < 10) { const e = new Error('Escreva o comando da imagem.'); e.status = 400; throw e; }
   const base = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
@@ -201,10 +201,17 @@ integ.get('/', tratar(req => ({ artes: listar(req.query), ...resumo(), produtos:
 integ.post('/prompt', tratar(req => montarPrompt(req.body || {})));
 integ.post('/', tratar(req => salvar({ ...(req.body || {}), enviado_por: 'theo' })));
 integ.post('/gerar', tratar(req => gerar({ ...(req.body || {}), enviado_por: 'theo' })));
-integ.put('/:id', tratar(req => { const b = req.body || {}; return atualizar(Number(req.params.id), { titulo: b.titulo, destino: b.destino, aprovada: b.aprovada }); }));   // o Theo não mexe no catálogo nem nos pedidos
+// O Theo (no Prédio do Automazap) administra o banco inteiro: aprovar, usar como foto do site, ligar a pedido, excluir e limite da API.
+integ.put('/limite', tratar(req => { const v = parseFloat(String((req.body || {}).limite_usd).replace(',', '.')); if (!isFinite(v) || v < 0 || v > 1000) { const e = new Error('Limite entre 0 e 1000 dólares.'); e.status = 400; throw e; } setS('artes_limite_usd', String(v)); return infoApi(); }));
+integ.put('/:id', tratar(req => atualizar(Number(req.params.id), req.body || {})));
+integ.delete('/:id', tratar(req => ({ ok: remover(Number(req.params.id)) })));
 router.use('/api/integracao/artes', json, integ);
 
-router.get(['/admin/artes', '/admin/artes/'], (req, res) => res.sendFile(path.join(__dirname, 'artes.html')));
+// O banco de artes agora é administrado pelo Theo no Prédio do Automazap: o endereço antigo leva para lá.
+router.get(['/admin/artes', '/admin/artes/'], (req, res) => {
+  let az = ''; try { az = String(process.env.AUTOMAZAP_URL || getS('automazap_url') || '').replace(/\/+$/, ''); } catch (e) { /* sem conexão */ }
+  res.redirect(302, /^https?:\/\//.test(az) ? az + '/#predio' : '/admin/');
+});
 
 module.exports = router;
 Object.assign(module.exports, { montarPrompt, salvar, gerar, listar, atualizar, remover, artesDosPedidos, infoApi, pasta });
