@@ -97,6 +97,7 @@ router.post('/api/admin/automazap/conectar', requireAdmin, (req, res) => {
   catch (e) { return res.status(400).json({ error: 'Endereço do Automazap inválido.' }); }
   if (!process.env.NEXTAP_WEBHOOK_SECRET && !cfg('automazap_segredo')) db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('automazap_segredo', ?)").run(crypto.randomBytes(32).toString('hex'));
   if (!process.env.AUTOMAZAP_URL) db.prepare("INSERT OR REPLACE INTO settings (chave, valor) VALUES ('automazap_url', ?)").run(volta);
+  if (!/^[\x21-\x7e]{16,200}$/.test(segredo())) return res.status(400).json({ error: 'A variável NEXTAP_WEBHOOK_SECRET do NexTap no Railway está inválida (precisa de 16 a 200 caracteres, sem espaços nem acentos). Corrija ou apague essa variável e tente de novo.' });
   res.json({ segredo: segredo(), base: (process.env.SITE_HOST ? 'https://' + process.env.SITE_HOST.replace(/^https?:\/\//, '').replace(/\/.*$/, '') : `${req.protocol}://${req.get('host')}`), automazap: urlAutomazap() });
 });
 router.get('/api/admin/automazap/status', requireAdmin, (req, res) => res.json({ conectado: segredo().length >= 16 && !!urlAutomazap(), automazap: urlAutomazap(), por_variavel: !!process.env.NEXTAP_WEBHOOK_SECRET }));
