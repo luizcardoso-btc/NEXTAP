@@ -649,6 +649,49 @@ router.put('/plates/:id/codigo', (req, res) => {
   res.json({ ok: true, tracking_code: codigo });
 });
 
+// Pedidos com placas faltando (o pedido tem X placas e foram geradas menos): por modelo
+function faltasDoPedido(o) {
+  const esperado = {}; if (o.qty_azul) esperado.azul = o.qty_azul; if (o.qty_preta) esperado.preta = o.qty_preta;
+  for (const it of db.itensPedido(o.id)) esperado[it.nome] = (esperado[it.nome] || 0) + it.qty;
+  const tem = {}; for (const r of db.prepare("SELECT color, COUNT(*) AS n FROM plates WHERE order_id = ? GROUP BY color").all(o.id)) tem[r.color] = r.n;
+  const falta = {}; for (const [m, n] of Object.entries(esperado)) if (n > (tem[m] || 0)) falta[m] = n - (tem[m] || 0);
+  return falta;
+}
+router.get('/pedidos/faltando-placas', (req, res) => {
+  const L = db.prepare(`SELECT o.*, r.name AS revendedor FROM orders o JOIN resellers r ON r.id = o.reseller_id WHERE o.status IN ('pago','em_producao') ORDER BY o.id DESC LIMIT 300`).all();
+  res.json(L.map(o => ({ id: o.id, revendedor: o.revendedor, status: o.status, falta: faltasDoPedido(o) })).filter(o => Object.keys(o.falta).length));
+});
+// Completar um pedido com placas que estão no estoque de QR (ex.: #02691 e #02692 eram dele e voltaram ao estoque)
+router.post('/pedidos/:id/completar', (req, res) => {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado.' });
+  const norm = v => { const d = String(v || '').replace(/\D/g, ''); return d && d.length <= 8 ? '#' + d.padStart(5, '0') : null; };
+  const nums = [...new Set((Array.isArray(req.body.numeros) ? req.body.numeros : String(req.body.numeros || '').split(/[\s,;]+/)).map(norm).filter(Boolean))];
+  if (!nums.length) return res.status(400).json({ error: 'Informe os números das placas do estoque, por exemplo #02691 #02692.' });
+  const falta = faltasDoPedido(o), totalFalta = Object.values(falta).reduce((a, b) => a + b, 0);
+  if (!totalFalta) return res.status(400).json({ error: `O pedido #${o.id} já está completo.` });
+  if (nums.length > totalFalta) return res.status(400).json({ error: `O pedido #${o.id} só tem ${totalFalta} placa(s) faltando.` });
+  const erros = [], plano = [], restante = { ...falta };
+  for (const n of nums) {
+    const q = db.prepare('SELECT * FROM qr_estoque WHERE numero = ?').get(n);
+    if (!q) { erros.push(`${n} não está no estoque de QR.`); continue; }
+    if (q.plate_id || q.status !== 'livre') { const pl = q.plate_id && db.prepare('SELECT p.tracking_code, r.name FROM plates p JOIN resellers r ON r.id = p.reseller_id WHERE p.id = ?').get(q.plate_id); erros.push(`${n} não está livre${pl ? ` (é de ${pl.name})` : ''}.`); continue; }
+    const modelo = restante[q.cor] ? q.cor : Object.keys(restante).find(m => restante[m] > 0);
+    restante[modelo]--; plano.push({ q, modelo, aviso: modelo !== q.cor ? `${n} estava no estoque como "${q.cor}" e entra como "${modelo}".` : '' });
+  }
+  if (erros.length) return res.status(400).json({ error: erros.join(' ') });
+  if (req.body.aplicar !== true) return res.json({ ok: true, aplicado: false, falta, itens: plano.map(x => ({ numero: x.q.numero, modelo: x.modelo, aviso: x.aviso })) });
+  db.transaction(() => {
+    for (const x of plano) {
+      const r = db.prepare("INSERT INTO plates (reseller_id, order_id, code, color, status, cost) VALUES (?, ?, ?, ?, 'estoque', ?)").run(o.reseller_id, o.id, x.q.code, x.modelo, o.unit_price);
+      db.prepare('UPDATE plates SET tracking_code = ? WHERE id = ?').run(x.q.numero, r.lastInsertRowid);
+      db.prepare("UPDATE qr_estoque SET status = 'usada', usado_em = datetime('now'), plate_id = ?, cor = ? WHERE id = ?").run(r.lastInsertRowid, x.modelo, x.q.id);
+    }
+    pedidos.registrarEvento({ origem: 'admin', order_id: o.id, resultado: 'pedido_completado_estoque', detalhe: plano.map(x => `${x.q.numero} (${x.modelo})`).join(', ') });
+  })();
+  res.json({ ok: true, aplicado: true, total: plano.length, falta: faltasDoPedido(o) });
+});
+
 // Renumerar várias placas de uma vez: linhas [{de, para}] (código atual → novo). aplicar=false só confere (prévia).
 router.post('/placas/renumerar', (req, res) => {
   const b = req.body || {}, linhas = Array.isArray(b.linhas) ? b.linhas : [];
