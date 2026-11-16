@@ -659,7 +659,19 @@ function faltasDoPedido(o) {
 }
 router.get('/pedidos/faltando-placas', (req, res) => {
   const L = db.prepare(`SELECT o.*, r.name AS revendedor FROM orders o JOIN resellers r ON r.id = o.reseller_id WHERE o.status IN ('pago','em_producao') ORDER BY o.id DESC LIMIT 300`).all();
-  res.json(L.map(o => ({ id: o.id, revendedor: o.revendedor, status: o.status, falta: faltasDoPedido(o) })).filter(o => Object.keys(o.falta).length));
+  const livres = db.prepare("SELECT numero, cor FROM qr_estoque WHERE status = 'livre' AND plate_id IS NULL").all().map(q => ({ ...q, n: Number(String(q.numero).replace(/\D/g, '')) }));
+  const num = c => Number(String(c || '').replace(/\D/g, ''));
+  // Sugestão: para cada modelo que falta, os QR livres do estoque mais perto dos números que o pedido já tem (de preferência do mesmo modelo)
+  const sugerir = (o, falta) => {
+    const meus = db.prepare('SELECT tracking_code FROM plates WHERE order_id = ?').all(o.id).map(p => num(p.tracking_code)).filter(Boolean), usados = new Set(), out = [];
+    const dist = q => meus.length ? Math.min(...meus.map(m => Math.abs(m - q.n))) : q.n;
+    for (const [modelo, qtd] of Object.entries(falta)) {
+      const cand = livres.filter(q => !usados.has(q.numero)).sort((a, b) => (a.cor === modelo ? 0 : 1) - (b.cor === modelo ? 0 : 1) || dist(a) - dist(b));
+      for (const q of cand.slice(0, qtd)) { usados.add(q.numero); out.push(q.numero); }
+    }
+    return out;
+  };
+  res.json(L.map(o => { const falta = faltasDoPedido(o); return { id: o.id, revendedor: o.revendedor, status: o.status, falta, sugestao: Object.keys(falta).length ? sugerir(o, falta) : [] }; }).filter(o => Object.keys(o.falta).length));
 });
 // Completar um pedido com placas que estão no estoque de QR (ex.: #02691 e #02692 eram dele e voltaram ao estoque)
 router.post('/pedidos/:id/completar', (req, res) => {
