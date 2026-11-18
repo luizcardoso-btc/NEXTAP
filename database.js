@@ -546,6 +546,12 @@ CREATE TABLE IF NOT EXISTS sales (
   db => {
     db.exec(`CREATE TABLE IF NOT EXISTS estoque_fisico_forn (modelo TEXT NOT NULL, fornecedor TEXT NOT NULL, qtd INTEGER NOT NULL DEFAULT 0, atualizado_em TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (modelo, fornecedor))`);
   },
+  // Teste A/B do convite do grupo de ofertas: qual mensagem o revendedor recebeu e por onde clicou (convite = link da mensagem; painel = botão no painel).
+  db => {
+    const tem = new Set(db.prepare('PRAGMA table_info(resellers)').all().map(c => c.name));
+    if (!tem.has('grupo_variante')) db.exec('ALTER TABLE resellers ADD COLUMN grupo_variante TEXT');
+    if (!tem.has('grupo_clicou_via')) db.exec('ALTER TABLE resellers ADD COLUMN grupo_clicou_via TEXT');
+  },
 ];
 
 const versaoAtual = db.pragma('user_version', { simple: true });

@@ -25,6 +25,14 @@ router.get('/r/:code', (req, res) => {
   res.redirect(302, plate.destination_url);
 });
 
+// Link do convite do grupo de ofertas (teste A/B): marca o clique e manda para o grupo do WhatsApp.
+router.get('/g/:cod', (req, res) => {
+  const link = require('./grupo-ab.js').clique(req.params.cod, req.get('user-agent'));
+  if (!link) return res.status(404).send('Grupo indisponível no momento.');
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, link);
+});
+
 // Página pública do Pix cadastrado (o que o QR / NFC abre): mostra o QR e o "copia e cola".
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 router.get('/pix/:code', (req, res) => {

@@ -244,7 +244,7 @@ router.get('/grupo', (req, res) => {
   res.json({ link, nome: gLer('grupo_nome', 'Grupo de ofertas NexTap'), texto: gLer('grupo_texto', 'Receba as ofertas e promoções diárias das placas NexTap em primeira mão.'), clicou: !!(r && r.grupo_clicou_em) });
 });
 router.post('/grupo/entrei', (req, res) => {
-  db.prepare("UPDATE resellers SET grupo_clicou_em = COALESCE(grupo_clicou_em, datetime('now')) WHERE id = ?").run(req.resellerId);
+  db.prepare("UPDATE resellers SET grupo_clicou_via = CASE WHEN grupo_clicou_em IS NULL THEN 'painel' ELSE grupo_clicou_via END, grupo_clicou_em = COALESCE(grupo_clicou_em, datetime('now')) WHERE id = ?").run(req.resellerId);
   res.json({ ok: true });
 });
 

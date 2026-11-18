@@ -192,15 +192,25 @@ router.post('/resellers', async (req, res) => {
 // Convite do grupo/comunidade de ofertas no WhatsApp. O WhatsApp não permite adicionar pessoas sozinho: o revendedor entra clicando no convite.
 const gSet = db.prepare('SELECT valor FROM settings WHERE chave = ?'), gPut = db.prepare('INSERT INTO settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor');
 const gGet = (k, d = '') => { const r = gSet.get(k); return r ? r.valor : d; };
+const grupoAB = require('./grupo-ab.js');
 // Grupo atual de ofertas (80 pessoas): vira o convite padrão; se o admin trocar o link no painel, a troca vale.
 db.prepare("INSERT OR IGNORE INTO settings (chave, valor) VALUES ('grupo_link', 'https://chat.whatsapp.com/LE4mSgrx5q3L52520KZJ7c')").run();
 router.get('/grupo', (req, res) => {
   const t = db.prepare("SELECT COUNT(*) n, SUM(grupo_clicou_em IS NOT NULL) c FROM resellers").get();
   res.json({ link: gGet('grupo_link'), nome: gGet('grupo_nome', 'Grupo de ofertas NexTap'), texto: gGet('grupo_texto', 'Receba as ofertas e promoções diárias das placas NexTap em primeira mão.'),
-    msg: gGet('grupo_msg', 'Oi, {nome}! 👋 Aqui é da NexTap. Criamos o grupo de ofertas diárias das placas NFC para os revendedores. Entra por aqui: {link}'), total: t.n, clicaram: t.c || 0 });
+    msg: gGet('grupo_msg', grupoAB.MSG_A), msg_b: gGet('grupo_msg_b', grupoAB.MSG_B), msg_antiga: gGet('grupo_msg_antiga'), total: t.n, clicaram: t.c || 0, ab: grupoAB.resultados() });
+});
+router.post('/grupo/ab', (req, res) => {
+  const b = req.body || {};
+  try {
+    if (b.escolher) grupoAB.escolher(String(b.escolher));
+    else if (b.ativo !== undefined) gPut.run('grupo_ab_ativo', b.ativo ? '1' : '0');
+    res.json({ ok: true, ab: grupoAB.resultados() });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 router.post('/resellers/:id/convidado', (req, res) => {
-  const r = db.prepare("UPDATE resellers SET grupo_convidado_em = COALESCE(grupo_convidado_em, datetime('now')) WHERE id = ?").run(Number(req.params.id));
+  const v = ['a', 'b'].includes((req.body || {}).variante) ? req.body.variante : null;
+  const r = db.prepare("UPDATE resellers SET grupo_convidado_em = COALESCE(grupo_convidado_em, datetime('now')), grupo_variante = COALESCE(grupo_variante, ?) WHERE id = ?").run(v, Number(req.params.id));
   if (!r.changes) return res.status(404).json({ error: 'Revendedor não encontrado.' });
   res.json({ ok: true });
 });
@@ -210,12 +220,13 @@ router.put('/grupo', (req, res) => {
   gPut.run('grupo_link', link);
   if (b.nome !== undefined) gPut.run('grupo_nome', String(b.nome).trim().slice(0, 80) || 'Grupo de ofertas NexTap');
   if (b.texto !== undefined) gPut.run('grupo_texto', String(b.texto).trim().slice(0, 200));
-  if (b.msg !== undefined) gPut.run('grupo_msg', String(b.msg).trim().slice(0, 500));
+  if (b.msg !== undefined) gPut.run('grupo_msg', String(b.msg).trim().slice(0, 700));
+  if (b.msg_b !== undefined) gPut.run('grupo_msg_b', String(b.msg_b).trim().slice(0, 700));
   res.json({ ok: true });
 });
 router.get('/resellers', (req, res) => {
   const rows = db.prepare(`
-    SELECT r.id, r.name, r.email, r.whatsapp, r.addr_city, r.addr_state, r.created_at, r.cortesia, r.grupo_clicou_em, r.grupo_convidado_em,
+    SELECT r.id, r.name, r.email, r.whatsapp, r.addr_city, r.addr_state, r.created_at, r.cortesia, r.grupo_clicou_em, r.grupo_convidado_em, r.grupo_variante, r.grupo_clicou_via,
       (SELECT COUNT(*) FROM orders o WHERE o.reseller_id=r.id) AS pedidos,
       ((SELECT COALESCE(SUM(total),0) FROM orders o WHERE o.reseller_id=r.id AND o.a_receber=0 AND o.status IN ('pago','em_producao','enviado','entregue') AND o.id NOT IN (SELECT order_id FROM order_recebimentos))
        + (SELECT COALESCE(SUM(x.valor),0) FROM order_recebimentos x JOIN orders o ON o.id = x.order_id WHERE o.reseller_id=r.id AND o.status IN ('pago','em_producao','enviado','entregue'))) AS gasto,
@@ -223,6 +234,7 @@ router.get('/resellers', (req, res) => {
       (SELECT COUNT(*) FROM sales s WHERE s.reseller_id=r.id) AS vendas
     FROM resellers r ORDER BY r.id DESC
   `).all();
+  for (const r of rows) r.gsig = grupoAB.assinatura(r.id);
   res.json(rows);
 });
 
