@@ -8,8 +8,10 @@ const lerS = db.prepare('SELECT valor FROM settings WHERE chave = ?');
 const gravarS = db.prepare('INSERT INTO settings (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor');
 const ler = (k, d = '') => { const r = lerS.get(k); return r ? r.valor : d; };
 
-const MSG_A = 'Oi, {nome}! 👋 Aqui é da NexTap.\n\nCriamos um grupo no WhatsApp só para os revendedores das placas NFC. Lá você recebe:\n\n✅ Ofertas e lotes com desconto antes de todo mundo\n✅ Artes e vídeos prontos para divulgar\n✅ Dicas de quem já está vendendo as placas\n✅ Novidades e lançamentos de modelos\n\nÉ gratuito e você sai quando quiser.\n\nToque para entrar: {link}';
-const MSG_B = 'Oi, {nome}, tudo bem? Aqui é o Luiz, da NexTap. 😊\n\nVocê já está vendendo as placas NFC ou ainda está começando?\n\nCriei um grupo só para os revendedores, com artes prontas para divulgar, dicas de venda e as ofertas da semana em primeira mão.\n\nEntra por aqui, é gratuito: {link}';
+const MSG_A = 'Oi, {nome}! 👋 Aqui é a Bianca, da NexTap.\n\nCriamos um grupo no WhatsApp só para os revendedores das placas NFC. Lá você recebe:\n\n✅ Ofertas e lotes com desconto antes de todo mundo\n✅ Artes e vídeos prontos para divulgar\n✅ Dicas de quem já está vendendo as placas\n✅ Novidades e lançamentos de modelos\n\nÉ gratuito e você sai quando quiser.\n\nToque para entrar: {link}';
+const MSG_A_V1 = 'Oi, {nome}! 👋 Aqui é da NexTap.' + MSG_A.slice(MSG_A.indexOf('\n'));
+const MSG_B_V1 = 'Oi, {nome}, tudo bem? Aqui é o Luiz, da NexTap. 😊\n\nVocê já está vendendo as placas NFC ou ainda está começando?\n\nCriei um grupo só para os revendedores, com artes prontas para divulgar, dicas de venda e as ofertas da semana em primeira mão.\n\nEntra por aqui, é gratuito: {link}';
+const MSG_B = 'Oi, {nome}, tudo bem? Aqui é a Bianca, da NexTap. 😊\n\nVocê já está vendendo as placas NFC ou ainda está começando?\n\nCriamos um grupo só para os revendedores, com artes prontas para divulgar, dicas de venda e as ofertas da semana em primeira mão.\n\nEntre por aqui, é gratuito: {link}';
 
 // Primeira vez: liga o teste com as duas mensagens novas (a mensagem antiga fica guardada como referência).
 if (!lerS.get('grupo_ab_v1')) {
@@ -21,6 +23,15 @@ if (!lerS.get('grupo_ab_v1')) {
     gravarS.run('grupo_ab_ativo', '1');
     gravarS.run('grupo_ab_inicio', new Date().toISOString().slice(0, 19).replace('T', ' '));
     gravarS.run('grupo_ab_v1', '1');
+  })();
+}
+
+// Quem envia o convite é a Bianca: troca os textos da primeira versão (se você não tiver editado).
+if (!lerS.get('grupo_ab_v2')) {
+  db.transaction(() => {
+    if (ler('grupo_msg') === MSG_A_V1) gravarS.run('grupo_msg', MSG_A);
+    if (ler('grupo_msg_b') === MSG_B_V1) gravarS.run('grupo_msg_b', MSG_B);
+    gravarS.run('grupo_ab_v2', '1');
   })();
 }
 
