@@ -68,6 +68,27 @@ function finLucro() {
     + '<div class="fx-kpi main" style="border-color:' + sinal(L.lucro_final) + '"><small>Lucro estimado final</small><b style="color:' + sinal(L.lucro_final) + '">' + R(L.lucro_final) + '</b><div class="sb">margem ' + fxPc(L.margem_pct) + ' · ' + R(L.lucro_por_placa) + '/placa · ' + R(L.lucro_por_pedido) + '/pedido · ' + L.pedidos + ' pedido(s), ' + L.placas + ' placas</div></div>'
     + '</div>';
 
+  var mini = function (t, v, s, cor) { return '<div><small>' + t + '</small><b' + (cor ? ' style="color:' + cor + '"' : '') + '>' + v + '</b><small>' + s + '</small></div>'; };
+  /* ---- placas na confiança: quem levou as placas e paga depois ---- */
+  var fd = L.fiado || { pedidos: 0, itens: [] };
+  var fiado = '';
+  if (fd.pedidos) {
+    var linhas = fd.itens.map(function (x) {
+      return '<tr><td><b>' + E(x.revendedor) + '</b><br><small class="mut">#' + pad5(x.id) + ' · ' + x.placas + ' placas · há ' + x.dias + ' dia(s)</small></td>'
+        + '<td style="text-align:right">' + R(x.total) + (x.recebido ? '<br><small style="color:#16a34a">recebido ' + R(x.recebido) + '</small>' : '') + '</td>'
+        + '<td style="text-align:right;font-weight:800;color:' + (x.dias > 30 ? '#dc2626' : 'inherit') + '">' + R(x.falta) + '</td>'
+        + '<td style="text-align:right;color:' + sinal(x.lucro_falta) + '">' + R(x.lucro_falta) + '</td>'
+        + '<td style="white-space:nowrap"><button class="btn s" onclick="recParte(' + x.id + ')">💵 Receber parte</button> <button class="btn s" onclick="marcarRecebido(' + x.id + ')">💰 Recebi tudo</button>' + (typeof waBtn === 'function' ? waBtn(x.whatsapp) : '') + '</td></tr>';
+    }).join('');
+    fiado = '<div class="card" style="border-color:#f59e0b"><div class="fx-top"><h3>🤝 Placas na confiança (pagam depois)</h3><small class="mut">em aberto hoje, independe do período</small></div>'
+      + '<div class="fx-mini" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">'
+      + mini('Falta receber', R(fd.falta), fd.pedidos + ' pedido(s) · ' + fd.placas + ' placas' + (fd.recebido ? ' · já recebido ' + R(fd.recebido) : ''), '#b45309')
+      + mini('Lucro quando pagarem', R(fd.lucro_falta), 'já descontados custo da placa, ICMS e envio', sinal(fd.lucro_falta))
+      + mini('Lucro final se todos pagarem', R(L.lucro_se_receber), 'lucro do período ' + R(L.lucro_final) + ' + ' + R(fd.lucro_falta), sinal(L.lucro_se_receber))
+      + '</div><details style="margin-top:8px"' + (fd.pedidos <= 8 ? ' open' : '') + '><summary>Quem está devendo (' + fd.pedidos + ')</summary><div class="tw" style="margin-top:6px"><table style="width:100%"><tr><th>Revendedor</th><th style="text-align:right">Pedido</th><th style="text-align:right">Falta</th><th style="text-align:right">Lucro</th><th></th></tr>' + linhas + '</table></div>'
+      + '<small class="mut">Esses pedidos só entram na receita e no lucro quando você registra o recebimento (o que entra fica na data em que recebeu). Em vermelho: mais de 30 dias.</small></details></div>';
+  } else fiado = '<div class="card"><h3>🤝 Placas na confiança (pagam depois)</h3><small class="mut">Nenhum pedido em aberto. Para registrar placas que o revendedor leva e paga depois, use "🎁 Liberar placas" em Revendedores e marque "a receber".</small></div>';
+
   /* ---- para onde vai cada real da receita (barra empilhada + legenda que também é a tabela) ---- */
   var itens = [
     { n: 'Custo das placas', v: L.custo_placas, c: 'var(--s1)', sub: L.placas + ' × ' + R(c.custo_placa) + (c.custo_usa_medio ? ' (custo médio das compras)' : '') },
@@ -104,9 +125,8 @@ function finLucro() {
     : '<p class="mut" style="margin:8px 0 0">Nenhuma despesa no período.</p>';
   var desp = '<div class="card"><div class="fx-top"><h3>Despesas do período · ' + R(L.despesas) + '</h3><button class="btn s" onclick="finTab(\'desp\')">+ Lançar / ver todas</button></div>' + dlist + '</div>';
   var e = L.estoque, ar = L.a_receber;
-  var mini = function (t, v, s, cor) { return '<div><small>' + t + '</small><b' + (cor ? ' style="color:' + cor + '"' : '') + '>' + v + '</b><small>' + s + '</small></div>'; };
   var sit = '<div class="card"><h3>Situação do negócio</h3><div class="fx-mini">'
-    + mini('A receber', R(ar.valor), ar.pedidos + ' pedido(s) aguardando · sobrariam ~' + R(ar.lucro_estimado))
+    + mini('A receber', R(ar.valor), ar.pedidos + ' pedido(s) (confiança + checkout sem pagar) · sobrariam ~' + R(ar.lucro_estimado))
     + mini('Estoque disponível', e.disponivel, 'capital parado ' + R(e.valor_parado) + (e.dias_cobertura !== null ? ' · ~' + e.dias_cobertura + ' dias de vendas' : ''), e.disponivel < 0 ? '#dc2626' : '')
     + mini('Ponto de equilíbrio', L.ponto_equilibrio_placas ? L.ponto_equilibrio_placas + ' placas' : '—', 'para cobrir as despesas do período')
     + mini('Envio médio real', L.envio_medio_real === null ? 'não informado' : R(L.envio_medio_real), 'você cobra ' + R(c.frete_fixo) + ' de frete')
@@ -128,6 +148,14 @@ function finLucro() {
 
   var W = function (n, h) { return h ? '<div class="fx-o fx-o' + n + '">' + h + '</div>' : ''; };
   var duo = '<div class="fx-2"><div class="fx-col">' + W(2, desp) + W(3, pj) + '</div><div class="fx-col">' + W(1, sit) + W(4, fx) + W(5, ia) + '</div></div>';
-  return '<div class="fx">' + FX_CSS + pillsLuc() + '<div class="mut" style="margin:8px 2px 0">' + E(L.periodo) + '</div>' + kpis + flow + al + duo
+  return '<div class="fx">' + FX_CSS + pillsLuc() + '<div class="mut" style="margin:8px 2px 0">' + E(L.periodo) + '</div>' + kpis + fiado + flow + al + duo
     + '<p class="mut" style="margin:10px 4px;font-size:12px">Estimativa para gestão do negócio, calculada com os custos de “Custos e taxas”. ICMS e demais tributos devem ser confirmados com seu contador.</p></div>';
 }
+
+/* Depois de registrar um recebimento pelo Financeiro, recalcula o lucro na hora. */
+(function () {
+  var r1 = window.recParteOk, r2 = window.marcarRecebido;
+  var recalc = function () { if (typeof cur !== 'undefined' && cur === 'fin' && FT === 'lucro') loadLuc(); };
+  if (typeof r1 === 'function') window.recParteOk = async function (id) { await r1(id); recalc(); };
+  if (typeof r2 === 'function') window.marcarRecebido = async function (id) { await r2(id); recalc(); };
+})();

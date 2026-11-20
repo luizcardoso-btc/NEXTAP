@@ -125,6 +125,21 @@ function lucro(periodo) {
   for (const p of db.prepare('SELECT order_id, SUM(valor) v FROM order_recebimentos GROUP BY order_id').all()) recebPor[p.order_id] = p.v;
   for (const o of aw) { const rec = o.a_receber ? (recebPor[o.id] || 0) : 0, resto = o.total > 0 ? Math.max(0, 1 - rec / o.total) : 1; awValor += o.total * resto; awLucro += custosDoPedido(o, cfg).lucro * resto; }
 
+  // Placas na confiança: revendedor levou as placas e paga depois (pedido marcado "a receber"). Não depende do período: é o que está em aberto hoje.
+  const fiadoRows = db.prepare(`SELECT o.*, r.name AS reseller_name, r.whatsapp AS reseller_whatsapp FROM orders o JOIN resellers r ON r.id = o.reseller_id
+    WHERE o.a_receber = 1 AND o.status IN ${PAGOS} ORDER BY o.created_at`).all();
+  const hojeMs = Date.now();
+  const fiado = { pedidos: 0, placas: 0, valor: 0, recebido: 0, falta: 0, lucro_falta: 0, lucro_total: 0, itens: [] };
+  for (const o of fiadoRows) {
+    const c = custosDoPedido(o, cfg), rec = r2(recebPor[o.id] || 0), falta = r2(Math.max(0, o.total - rec)), fr = o.total > 0 ? falta / o.total : 1;
+    const dias = Math.max(0, Math.floor((hojeMs - new Date(String(o.created_at).replace(' ', 'T') + 'Z').getTime()) / 864e5));
+    fiado.pedidos++; fiado.placas += c.qty; fiado.valor += o.total; fiado.recebido += rec; fiado.falta += falta; fiado.lucro_falta += c.lucro * fr; fiado.lucro_total += c.lucro;
+    fiado.itens.push({ id: o.id, revendedor: o.reseller_name, whatsapp: o.reseller_whatsapp || '', data: o.created_at, dias, placas: c.qty, total: r2(o.total), recebido: rec, falta,
+      lucro_total: r2(c.lucro), lucro_falta: r2(c.lucro * fr), status: o.status });
+  }
+  for (const k of ['valor', 'recebido', 'falta', 'lucro_falta', 'lucro_total']) fiado[k] = r2(fiado[k]);
+  fiado.itens.sort((a, b) => b.falta - a.falta);
+
   // faixas de preço: quanto sobra em cada faixa (no pedido mínimo da faixa)
   const cardShare = T.receita_bruta ? T.card_valor / T.receita_bruta : 0;
   const taxaMedia = (1 - cardShare) * cfg.taxaPix + cardShare * cfg.taxaCartao;
@@ -151,6 +166,7 @@ function lucro(periodo) {
     margem_pct: pct(final, T.receita_bruta), lucro_por_placa: r2(lucroPlaca), lucro_por_pedido: T.pedidos ? r2(final / T.pedidos) : 0,
     ponto_equilibrio_placas: lucroBruto > 0 && desp.total > 0 && T.placas ? Math.ceil(desp.total / (lucroBruto / T.placas)) : 0,
     a_receber: { pedidos: aw.length, valor: r2(awValor), lucro_estimado: r2(awLucro) },
+    fiado, lucro_se_receber: r2(final + fiado.lucro_falta),
     faixas, pedidos_prejuizo: lista.filter(x => x.lucro < 0).sort((a, b) => a.lucro - b.lucro).slice(0, 10),
     config: { custo_placa: r2(cfg.custoPlaca), icms_pct: cfg.icmsPct, icms_base_frete: cfg.icmsBaseFrete, taxa_pix_pct: cfg.taxaPix, taxa_cartao_pct: cfg.taxaCartao,
       custo_envio_padrao: cfg.envioPadrao, frete_fixo: frete, custo_usa_medio: db.cfg('custo_usar_medio', 0) === 1 },
