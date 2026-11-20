@@ -87,7 +87,7 @@ function finLucro() {
       + mini('Lucro final se todos pagarem', R(L.lucro_se_receber), 'lucro do período ' + R(L.lucro_final) + ' + ' + R(fd.lucro_falta), sinal(L.lucro_se_receber))
       + '</div><details style="margin-top:8px"' + (fd.pedidos <= 8 ? ' open' : '') + '><summary>Quem está devendo (' + fd.pedidos + ')</summary><div class="tw" style="margin-top:6px"><table style="width:100%"><tr><th>Revendedor</th><th style="text-align:right">Pedido</th><th style="text-align:right">Falta</th><th style="text-align:right">Lucro</th><th></th></tr>' + linhas + '</table></div>'
       + '<small class="mut">Esses pedidos só entram na receita e no lucro quando você registra o recebimento (o que entra fica na data em que recebeu). Em vermelho: mais de 30 dias.</small></details></div>';
-  } else fiado = '<div class="card"><h3>🤝 Placas na confiança (pagam depois)</h3><small class="mut">Nenhum pedido em aberto. Para registrar placas que o revendedor leva e paga depois, use "🎁 Liberar placas" em Revendedores e marque "a receber".</small></div>';
+  } else fiado = '<div class="card"><h3>🤝 Placas na confiança (pagam depois)</h3><small class="mut">Nenhum pedido em aberto. Para registrar placas que o revendedor leva e paga depois, use "🎁 Liberar placas" em Revendedores e marque "Vai pagar depois".</small></div>';
 
   /* ---- para onde vai cada real da receita (barra empilhada + legenda que também é a tabela) ---- */
   var itens = [
