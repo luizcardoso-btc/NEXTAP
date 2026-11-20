@@ -68,6 +68,7 @@ app.use('/api/admin', require('./routes-admin.js'));
 app.use('/', require('./catalogo.js')); // catálogo de produtos (LP + checkout do revendedor + /admin/catalogo)
 app.use('/', require('./declaracao-conteudo.js')); // declaração de conteúdo em PDF (página /admin/declaracao + API)
 app.use('/', require('./exportar-placas.js'));
+app.use('/', require('./resultados.js').router); // resultados das placas: leituras e avaliações no Google (prova de crescimento)
 app.use('/', require('./estoque-qr.js')); // estoque de QR pré-numerados: /api/admin/qr-estoque // exportação das últimas placas vendidas (ZIP para o fornecedor)
 const promocao = require('./promocao.js');
 app.use('/', require('./vitrine.js')); // vitrine de banners do Dashboard do revendedor (+ /api/admin/vitrine)

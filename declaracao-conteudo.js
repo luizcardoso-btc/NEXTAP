@@ -314,6 +314,7 @@ api.get('/nfe/:id/ficha', (req, res) => {
 });
 
 router.get('/admin-financeiro.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-financeiro.js')));
+router.get('/admin-resultados.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-resultados.js')));
 router.get('/admin-declaracao.js', (req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-declaracao.js')));
 
 api.post('/gerar-pendentes', async (req, res) => res.json({ geradas: await gerarPendentes() }));
